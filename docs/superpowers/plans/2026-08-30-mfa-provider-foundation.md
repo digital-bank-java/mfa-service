@@ -32,7 +32,7 @@
 **Interfaces:**
 - Tests define the expected `TotpEnrollmentService` constructor, enrollment outcomes, and store/provider ports consumed by later tasks.
 
-- [ ] **Step 1: Add the standard TOTP dependency**
+- [x] **Step 1: Add the standard TOTP dependency**
 
 Add this Maven dependency under application dependencies:
 
@@ -44,17 +44,17 @@ Add this Maven dependency under application dependencies:
 </dependency>
 ```
 
-- [ ] **Step 2: Write the failing enrollment tests**
+- [x] **Step 2: Write the failing enrollment tests**
 
 Cover these behaviors with direct service tests and a deterministic fake provider/id generator: enrollment creates `PENDING`, valid code activates it, invalid code leaves it pending, unknown enrollment fails, and returned values plus `toString` do not contain the generated secret.
 
-- [ ] **Step 3: Run the focused test to verify the expected compile failure**
+- [x] **Step 3: Run the focused test to verify the expected compile failure**
 
 Run: `./mvnw --batch-mode --no-transfer-progress -Dtest=TotpEnrollmentServiceTest test`
 
 Expected: compilation fails because the application/domain contracts do not exist yet.
 
-- [ ] **Step 4: Commit the dependency and red tests**
+- [x] **Step 4: Commit the dependency and red tests**
 
 ```bash
 git add pom.xml src/test/java/com/digitalbank/mfaservice/mfa/application
@@ -82,25 +82,25 @@ git commit -m "test: define totp enrollment contract"
 - `MfaIdentifierGenerator.newEnrollmentId(): EnrollmentId` and `newChallengeId(): ChallengeId`.
 - `TotpEnrollmentService.enroll(String): EnrollmentResult` and `verify(EnrollmentId, String): EnrollmentResult`.
 
-- [ ] **Step 1: Implement the minimal domain and port types required by the tests**
+- [x] **Step 1: Implement the minimal domain and port types required by the tests**
 
 Keep the secret in a private credential implementation held by `Enrollment`; expose only id, subject, creation instant, and status. Make activation synchronized and reject activation after the record is already active.
 
-- [ ] **Step 2: Implement `TotpEnrollmentService`**
+- [x] **Step 2: Implement `TotpEnrollmentService`**
 
 Inject `EnrollmentStore`, `TotpProvider`, `MfaIdentifierGenerator`, and `Clock`. Use the clock instant for creation and verification. Return typed outcomes without a secret.
 
-- [ ] **Step 3: Implement `InMemoryEnrollmentStore`**
+- [x] **Step 3: Implement `InMemoryEnrollmentStore`**
 
 Use a `ConcurrentHashMap<EnrollmentId, Enrollment>`. Do not add logging or public secret accessors. Map duplicate identifiers to an explicit duplicate failure rather than replacing a credential.
 
-- [ ] **Step 4: Run the focused enrollment tests**
+- [x] **Step 4: Run the focused enrollment tests**
 
 Run: `./mvnw --batch-mode --no-transfer-progress -Dtest=TotpEnrollmentServiceTest test`
 
 Expected: all enrollment tests pass.
 
-- [ ] **Step 5: Commit the enrollment slice**
+- [x] **Step 5: Commit the enrollment slice**
 
 ```bash
 git add src/main/java/com/digitalbank/mfaservice/mfa
@@ -125,31 +125,31 @@ git commit -m "feat: add totp enrollment foundation"
 - `MfaChallengeService.create(EnrollmentId): ChallengeResult` and `verify(ChallengeId, String): ChallengeResult`.
 - `Challenge.verify(Instant, BooleanSupplier): ChallengeVerificationStatus`.
 
-- [ ] **Step 1: Write failing challenge tests**
+- [x] **Step 1: Write failing challenge tests**
 
 Test creation metadata and attempt budget, invalid code decrement, exhaustion on the final allowed failure, expired code rejection at the exact boundary and after it, successful consumption, replay rejection, unknown challenge rejection, and no verifier call for expired/consumed/exhausted challenges.
 
-- [ ] **Step 2: Run challenge tests to verify they fail for missing contracts**
+- [x] **Step 2: Run challenge tests to verify they fail for missing contracts**
 
 Run: `./mvnw --batch-mode --no-transfer-progress -Dtest=MfaChallengeServiceTest test`
 
 Expected: compilation fails because challenge contracts do not exist yet.
 
-- [ ] **Step 3: Implement challenge state transitions**
+- [x] **Step 3: Implement challenge state transitions**
 
 Make `Challenge.verify` synchronized. Check terminal state first, then expiry using `!now.isBefore(expiresAt)`, then invoke the supplied verifier exactly once for an open challenge. Successful verification sets `CONSUMED`; failed verification increments attempts and sets `EXHAUSTED` at the limit.
 
-- [ ] **Step 4: Implement `MfaChallengeService` and the in-memory store**
+- [x] **Step 4: Implement `MfaChallengeService` and the in-memory store**
 
 Require an active enrollment on creation, calculate expiry with the injected clock and configured TTL, and pass the enrollment credential verifier into the synchronized challenge transition. Return remaining attempts and typed status, never credential data.
 
-- [ ] **Step 5: Run challenge tests and the full unit suite**
+- [x] **Step 5: Run challenge tests and the full unit suite**
 
 Run: `./mvnw --batch-mode --no-transfer-progress -Dtest=TotpEnrollmentServiceTest,MfaChallengeServiceTest test`
 
 Expected: all focused tests pass with no verifier call after terminal transitions.
 
-- [ ] **Step 6: Commit the challenge slice**
+- [x] **Step 6: Commit the challenge slice**
 
 ```bash
 git add src/main/java/com/digitalbank/mfaservice/mfa src/test/java/com/digitalbank/mfaservice/mfa/application/MfaChallengeServiceTest.java
@@ -171,25 +171,25 @@ git commit -m "feat: add bounded mfa challenge foundation"
 - `SamStevensTotpProvider` implements `TotpProvider` using the library's `DefaultSecretGenerator`, `DefaultCodeVerifier`, and a clock-backed `TimeProvider`.
 - `MfaProperties` binds `mfa.challenge.ttl` and `mfa.challenge.max-attempts` with positive/upper-bound validation.
 
-- [ ] **Step 1: Write the failing provider test**
+- [x] **Step 1: Write the failing provider test**
 
 Use the fixed RFC 6238 test secret and clock instant to assert that the standard provider accepts the known valid code, rejects an invalid code, and generates a nonblank Base32 secret. The test should fail until the adapter exists.
 
-- [ ] **Step 2: Implement the standard library adapter**
+- [x] **Step 2: Implement the standard library adapter**
 
 Delegate all TOTP calculations to `dev.samstevens.totp`. Adapt `Clock.instant()` to the library `TimeProvider`; do not implement HMAC, truncation, or time-step arithmetic in repository code.
 
-- [ ] **Step 3: Implement secure identifier generation and Spring configuration**
+- [x] **Step 3: Implement secure identifier generation and Spring configuration**
 
 Use secure random UUID values for enrollment/challenge ids. Register the clock, identifier generator, provider, stores, properties, and application services as beans. Set the documented local defaults in `application.properties`.
 
-- [ ] **Step 4: Run provider and application tests**
+- [x] **Step 4: Run provider and application tests**
 
 Run: `./mvnw --batch-mode --no-transfer-progress -Dtest=SamStevensTotpProviderTest,MfaServiceApplicationIT test`
 
 Expected: the provider test and existing bootstrap integration test pass.
 
-- [ ] **Step 5: Commit provider/configuration wiring**
+- [x] **Step 5: Commit provider/configuration wiring**
 
 ```bash
 git add pom.xml src/main/java src/main/resources/application.properties src/test/java/com/digitalbank/mfaservice/mfa/adapter/totp
@@ -204,17 +204,17 @@ git commit -m "feat: wire standard totp provider"
 - Modify: `AGENTS.md`
 - Create: `docs/problem-details.md`
 
-- [ ] **Step 1: Update metadata and docs**
+- [x] **Step 1: Update metadata and docs**
 
 State that the current release contains Java application ports and in-memory adapters only, describe secret non-disclosure and terminal challenge behavior, document defaults and deterministic test seams, and list auth-service/persistence/provider/gateway integration as deferred. Explain that no HTTP routes or Insomnia requests exist in this wave.
 
-- [ ] **Step 2: Run formatting and documentation checks**
+- [x] **Step 2: Run formatting and documentation checks**
 
 Run: `./mvnw --batch-mode --no-transfer-progress spotless:check` and `git diff --check`.
 
 Expected: both commands exit 0.
 
-- [ ] **Step 3: Commit documentation**
+- [x] **Step 3: Commit documentation**
 
 ```bash
 git add README.md AGENTS.md docs/problem-details.md src/main/java/com/digitalbank/mfaservice/MfaServiceApplication.java
@@ -226,7 +226,7 @@ git commit -m "docs: document mfa foundation boundaries"
 **Files:**
 - No source changes expected; inspect the complete branch diff.
 
-- [ ] **Step 1: Run the required verification commands**
+- [x] **Step 1: Run the required verification commands**
 
 Run each command from the repository root:
 
@@ -240,20 +240,20 @@ git diff --check feature/49-mfa-service-bootstrap...HEAD
 
 For Docker smoke, start the built image with the same disposable Config Server pattern used by `.github/workflows/ci.yml`, verify the image user is `10001:10001`, and probe health, liveness, and readiness. Record command results in the PR body.
 
-- [ ] **Step 2: Review the final diff and branch ancestry**
+- [x] **Step 2: Review the final diff and branch ancestry**
 
 Run `git diff --stat feature/49-mfa-service-bootstrap...HEAD`, `git log --oneline --decorate feature/49-mfa-service-bootstrap..HEAD`, and confirm the branch base is `021c48e` with no unrelated files or secrets.
 
-- [ ] **Step 3: Push the feature branch**
+- [x] **Step 3: Push the feature branch**
 
 ```bash
 git push --set-upstream origin feature/49-mfa-provider-foundation
 ```
 
-- [ ] **Step 4: Open a non-draft PR against the bootstrap branch**
+- [x] **Step 4: Open a non-draft PR against the bootstrap branch**
 
 Use base `feature/49-mfa-service-bootstrap`, title `feat: add mfa provider foundation`, and a valid Markdown body linking [#49](https://github.com/digital-bank-java/.github/issues/49), [#50](https://github.com/digital-bank-java/.github/issues/50), [#51](https://github.com/digital-bank-java/.github/issues/51), and [bootstrap PR #1](https://github.com/digital-bank-java/mfa-service/pull/1). Explain that PR #1 must merge first, this PR depends on its runtime/build foundation, and neither PR is merged by the coding agent. Explicitly state that the new PR is non-draft and that auth-service, persistence, provider integrations, and routes remain later work.
 
-- [ ] **Step 5: Verify PR state**
+- [x] **Step 5: Verify PR state**
 
 Run `gh pr view --json url,isDraft,baseRefName,headRefName,state` and confirm the URL, `isDraft=false`, base `feature/49-mfa-service-bootstrap`, and `state=OPEN`. Do not merge.
