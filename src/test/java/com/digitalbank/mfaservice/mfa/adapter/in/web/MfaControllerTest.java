@@ -2,6 +2,7 @@ package com.digitalbank.mfaservice.mfa.adapter.in.web;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -19,8 +20,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
@@ -51,6 +56,7 @@ class MfaControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new MfaController(enrollmentService, challengeService))
                 .setControllerAdvice(new MfaApiExceptionHandler())
                 .setValidator(validator)
+                .defaultRequest(get("/").principal(authentication("subject-1")))
                 .build();
     }
 
@@ -72,26 +78,22 @@ class MfaControllerTest {
     }
 
     @Test
-    void rejectsInvalidEnrollmentRequest() throws Exception {
+    void acceptsLegacySubjectIdWithoutUsingItForOwnership() throws Exception {
         mockMvc.perform(post("/api/v1/mfa/enrollments")
                         .contentType(APPLICATION_JSON)
                         .content("""
                                 {
-                                  "subjectId": " "
+                                  "subjectId": "subject-2"
                                 }
                                 """))
-                .andExpect(status().isBadRequest())
-                .andExpect(header().string(
-                                "Content-Type", org.hamcrest.Matchers.startsWith(APPLICATION_PROBLEM_JSON.toString())))
-                .andExpect(jsonPath("$.type").value("https://digital-bank-java.local/problems/validation-error"))
-                .andExpect(jsonPath("$.title").value("Invalid request"))
-                .andExpect(jsonPath("$.errors[0].field").value("subjectId"));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.enrollmentId").value("enrollment-1"));
     }
 
     @Test
     void mapsEnrollmentVerificationConflict() throws Exception {
         enrollmentService.enroll("subject-1");
-        enrollmentService.verify(ENROLLMENT_ID, "123456");
+        enrollmentService.verify(ENROLLMENT_ID, "subject-1", "123456");
 
         mockMvc.perform(post("/api/v1/mfa/enrollments/enrollment-1/verifications")
                         .contentType(APPLICATION_JSON)
@@ -126,8 +128,8 @@ class MfaControllerTest {
     @Test
     void mapsChallengeVerificationFailure() throws Exception {
         enrollmentService.enroll("subject-1");
-        enrollmentService.verify(ENROLLMENT_ID, "123456");
-        challengeService.create(ENROLLMENT_ID);
+        enrollmentService.verify(ENROLLMENT_ID, "subject-1", "123456");
+        challengeService.create(ENROLLMENT_ID, "subject-1");
 
         mockMvc.perform(post("/api/v1/mfa/challenges/challenge-1/verifications")
                         .contentType(APPLICATION_JSON)
@@ -184,5 +186,13 @@ class MfaControllerTest {
         public boolean verify(String secret, String code, Instant at) {
             return "TEST-SECRET".equals(secret) && "123456".equals(code);
         }
+    }
+
+    private static JwtAuthenticationToken authentication(String subject) {
+        var jwt = Jwt.withTokenValue("test-token")
+                .header("alg", "none")
+                .subject(subject)
+                .build();
+        return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("SCOPE_mfa.internal")));
     }
 }

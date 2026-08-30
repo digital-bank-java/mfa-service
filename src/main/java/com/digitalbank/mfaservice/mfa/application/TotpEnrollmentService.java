@@ -33,9 +33,9 @@ public final class TotpEnrollmentService {
         return new EnrollmentResult(EnrollmentOutcome.ENROLLED, enrollmentId, enrollment.status());
     }
 
-    public EnrollmentResult verify(EnrollmentId enrollmentId, String code) {
+    public EnrollmentResult verify(EnrollmentId enrollmentId, String subjectId, String code) {
         var enrollment = enrollmentStore.find(enrollmentId);
-        if (enrollment.isEmpty()) {
+        if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
             return new EnrollmentResult(EnrollmentOutcome.NOT_FOUND, enrollmentId, null);
         }
         var record = enrollment.orElseThrow();

@@ -62,12 +62,14 @@ The service exposes these routes directly on `mfa-service`:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/mfa/enrollments` | Create a pending MFA enrollment from an opaque `subjectId`. |
+| `POST` | `/api/v1/mfa/enrollments` | Create a pending MFA enrollment for the authenticated JWT subject. |
 | `POST` | `/api/v1/mfa/enrollments/{enrollmentId}/verifications` | Verify a pending enrollment with a 6-digit TOTP code and activate it. |
 | `POST` | `/api/v1/mfa/challenges` | Create an MFA challenge for an active enrollment. |
 | `POST` | `/api/v1/mfa/challenges/{challengeId}/verifications` | Verify an MFA challenge with a 6-digit TOTP code. |
 
 All `/api/v1/mfa/**` routes require an internal bearer JWT. Success responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. Raw TOTP secrets, provisioning URIs, and submitted codes are never returned.
+
+Enrollment ownership is derived exclusively from the authenticated JWT `sub` claim. The legacy `subjectId` request field remains accepted for client compatibility but is ignored and is not an authorization input. Enrollment and challenge identifiers are also checked against that authenticated subject; missing and foreign resources use the same controlled `404` resource-not-found problem.
 
 Representative requests:
 
@@ -75,9 +77,7 @@ Representative requests:
 curl --request POST http://localhost:8087/api/v1/mfa/enrollments \
   --header 'Authorization: Bearer <internal-jwt>' \
   --header 'Content-Type: application/json' \
-  --data '{
-    "subjectId": "customer-123"
-  }'
+  --data '{}'
 
 curl --request POST http://localhost:8087/api/v1/mfa/enrollments/<enrollment-id>/verifications \
   --header 'Authorization: Bearer <internal-jwt>' \

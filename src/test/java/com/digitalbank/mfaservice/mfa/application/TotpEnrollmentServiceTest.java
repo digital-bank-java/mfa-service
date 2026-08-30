@@ -44,7 +44,7 @@ class TotpEnrollmentServiceTest {
         service.enroll("subject-1");
         provider.setVerificationResult(true);
 
-        EnrollmentResult result = service.verify(ENROLLMENT_ID, "123456");
+        EnrollmentResult result = service.verify(ENROLLMENT_ID, "subject-1", "123456");
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.ACTIVATED);
         assertThat(result.enrollmentStatus()).isEqualTo(EnrollmentStatus.ACTIVE);
@@ -58,7 +58,7 @@ class TotpEnrollmentServiceTest {
         service.enroll("subject-1");
         provider.setVerificationResult(false);
 
-        EnrollmentResult result = service.verify(ENROLLMENT_ID, "000000");
+        EnrollmentResult result = service.verify(ENROLLMENT_ID, "subject-1", "000000");
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.INVALID_CODE);
         assertThat(result.enrollmentStatus()).isEqualTo(EnrollmentStatus.PENDING);
@@ -67,7 +67,7 @@ class TotpEnrollmentServiceTest {
 
     @Test
     void unknownEnrollmentFailsWithoutProviderVerification() {
-        EnrollmentResult result = service.verify(new EnrollmentId("missing"), "123456");
+        EnrollmentResult result = service.verify(new EnrollmentId("missing"), "subject-1", "123456");
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.NOT_FOUND);
         assertThat(provider.verificationCalls()).isZero();
@@ -77,11 +77,22 @@ class TotpEnrollmentServiceTest {
     void activeEnrollmentCannotBeActivatedAgain() {
         service.enroll("subject-1");
         provider.setVerificationResult(true);
-        service.verify(ENROLLMENT_ID, "123456");
+        service.verify(ENROLLMENT_ID, "subject-1", "123456");
 
-        EnrollmentResult result = service.verify(ENROLLMENT_ID, "123456");
+        EnrollmentResult result = service.verify(ENROLLMENT_ID, "subject-1", "123456");
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.ALREADY_ACTIVE);
         assertThat(provider.verificationCalls()).isEqualTo(1);
+    }
+
+    @Test
+    void foreignSubjectCannotVerifyEnrollment() {
+        service.enroll("subject-1");
+
+        EnrollmentResult result = service.verify(ENROLLMENT_ID, "subject-2", "123456");
+
+        assertThat(result.status()).isEqualTo(EnrollmentOutcome.NOT_FOUND);
+        assertThat(provider.verificationCalls()).isZero();
+        assertThat(store.find(ENROLLMENT_ID).orElseThrow().status()).isEqualTo(EnrollmentStatus.PENDING);
     }
 }

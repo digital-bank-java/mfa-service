@@ -20,6 +20,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,8 +43,8 @@ class MfaController {
               "instance": "/api/v1/mfa/enrollments",
               "errors": [
                 {
-                  "field": "subjectId",
-                  "message": "must not be blank"
+                  "field": "request",
+                  "message": "Malformed JSON request"
                 }
               ]
             }
@@ -302,8 +304,9 @@ class MfaController {
                                     @ExampleObject(
                                             name = "validation-error",
                                             value = CREATE_ENROLLMENT_VALIDATION_PROBLEM_EXAMPLE)))
-    ResponseEntity<EnrollmentResponse> createEnrollment(@Valid @RequestBody CreateEnrollmentRequest request) {
-        var result = enrollmentService.enroll(request.subjectId());
+    ResponseEntity<EnrollmentResponse> createEnrollment(
+            Authentication authentication, @Valid @RequestBody CreateEnrollmentRequest request) {
+        var result = enrollmentService.enroll(authenticatedSubject(authentication));
         var response = EnrollmentResponse.from(result);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .location(URI.create("/api/v1/mfa/enrollments/" + response.enrollmentId()))
@@ -383,8 +386,11 @@ class MfaController {
                                             name = "enrollment-already-active",
                                             value = ENROLLMENT_ALREADY_ACTIVE_PROBLEM_EXAMPLE)))
     ResponseEntity<EnrollmentResponse> verifyEnrollment(
-            @PathVariable String enrollmentId, @Valid @RequestBody VerifyTotpCodeRequest request) {
-        var result = enrollmentService.verify(new EnrollmentId(enrollmentId), request.code());
+            Authentication authentication,
+            @PathVariable String enrollmentId,
+            @Valid @RequestBody VerifyTotpCodeRequest request) {
+        var result = enrollmentService.verify(
+                new EnrollmentId(enrollmentId), authenticatedSubject(authentication), request.code());
         return ResponseEntity.ok(mapEnrollmentVerificationResult(result));
     }
 
@@ -457,8 +463,10 @@ class MfaController {
                                     @ExampleObject(
                                             name = "enrollment-not-active",
                                             value = ENROLLMENT_CONFLICT_PROBLEM_EXAMPLE)))
-    ResponseEntity<ChallengeResponse> createChallenge(@Valid @RequestBody CreateChallengeRequest request) {
-        var result = challengeService.create(new EnrollmentId(request.enrollmentId()));
+    ResponseEntity<ChallengeResponse> createChallenge(
+            Authentication authentication, @Valid @RequestBody CreateChallengeRequest request) {
+        var result =
+                challengeService.create(new EnrollmentId(request.enrollmentId()), authenticatedSubject(authentication));
         var response = mapChallengeCreationResult(result);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .location(URI.create("/api/v1/mfa/challenges/" + response.challengeId()))
@@ -527,9 +535,25 @@ class MfaController {
                                             name = "resource-not-found",
                                             value = VERIFY_CHALLENGE_RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE)))
     ResponseEntity<ChallengeResponse> verifyChallenge(
-            @PathVariable String challengeId, @Valid @RequestBody VerifyTotpCodeRequest request) {
-        var result = challengeService.verify(new ChallengeId(challengeId), request.code());
+            Authentication authentication,
+            @PathVariable String challengeId,
+            @Valid @RequestBody VerifyTotpCodeRequest request) {
+        var result = challengeService.verify(
+                new ChallengeId(challengeId), authenticatedSubject(authentication), request.code());
         return ResponseEntity.ok(mapChallengeVerificationResult(result));
+    }
+
+    private static String authenticatedSubject(Authentication authentication) {
+        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
+            throw MfaProblemException.accessDenied(
+                    "A JWT-authenticated principal with a subject is required to access this MFA resource.");
+        }
+        var subject = jwtAuthentication.getToken().getSubject();
+        if (subject == null || subject.isBlank()) {
+            throw MfaProblemException.accessDenied(
+                    "A JWT-authenticated principal with a subject is required to access this MFA resource.");
+        }
+        return subject;
     }
 
     private static EnrollmentResponse mapEnrollmentVerificationResult(EnrollmentResult result) {

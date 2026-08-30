@@ -49,7 +49,7 @@ class MfaChallengeServiceTest {
         enrollmentService = new TotpEnrollmentService(enrollmentStore, provider, identifiers, clock);
         provider.setVerificationResult(true);
         enrollmentService.enroll("subject-1");
-        enrollmentService.verify(ENROLLMENT_ID, "123456");
+        enrollmentService.verify(ENROLLMENT_ID, "subject-1", "123456");
         provider.resetVerificationCalls();
         service = new MfaChallengeService(
                 enrollmentStore, challengeStore, provider, identifiers, clock, Duration.ofMinutes(5), 3);
@@ -57,7 +57,7 @@ class MfaChallengeServiceTest {
 
     @Test
     void createsOpenChallengeWithConfiguredExpiryAndAttemptBudget() {
-        ChallengeResult result = service.create(ENROLLMENT_ID);
+        ChallengeResult result = service.create(ENROLLMENT_ID, "subject-1");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.CREATED);
         assertThat(result.challengeId()).isEqualTo(CHALLENGE_ID);
@@ -68,7 +68,7 @@ class MfaChallengeServiceTest {
 
     @Test
     void cannotCreateChallengeForUnknownEnrollment() {
-        ChallengeResult result = service.create(new EnrollmentId("missing"));
+        ChallengeResult result = service.create(new EnrollmentId("missing"), "subject-1");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.ENROLLMENT_NOT_FOUND);
         assertThat(result.challengeId()).isNull();
@@ -78,9 +78,9 @@ class MfaChallengeServiceTest {
     @Test
     void invalidCodeDecrementsAttempts() {
         provider.setVerificationResult(false);
-        service.create(ENROLLMENT_ID);
+        service.create(ENROLLMENT_ID, "subject-1");
 
-        ChallengeResult result = service.verify(CHALLENGE_ID, "000000");
+        ChallengeResult result = service.verify(CHALLENGE_ID, "subject-1", "000000");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.INVALID_CODE);
         assertThat(result.challengeStatus()).isEqualTo(ChallengeStatus.OPEN);
@@ -91,11 +91,11 @@ class MfaChallengeServiceTest {
     @Test
     void finalInvalidCodeExhaustsChallenge() {
         provider.setVerificationResult(false);
-        service.create(ENROLLMENT_ID);
+        service.create(ENROLLMENT_ID, "subject-1");
 
-        service.verify(CHALLENGE_ID, "000000");
-        service.verify(CHALLENGE_ID, "000000");
-        ChallengeResult result = service.verify(CHALLENGE_ID, "000000");
+        service.verify(CHALLENGE_ID, "subject-1", "000000");
+        service.verify(CHALLENGE_ID, "subject-1", "000000");
+        ChallengeResult result = service.verify(CHALLENGE_ID, "subject-1", "000000");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.EXHAUSTED);
         assertThat(result.challengeStatus()).isEqualTo(ChallengeStatus.EXHAUSTED);
@@ -106,13 +106,13 @@ class MfaChallengeServiceTest {
     @Test
     void exhaustedChallengeRejectsFurtherVerificationWithoutCallingProvider() {
         provider.setVerificationResult(false);
-        service.create(ENROLLMENT_ID);
-        service.verify(CHALLENGE_ID, "000000");
-        service.verify(CHALLENGE_ID, "000000");
-        service.verify(CHALLENGE_ID, "000000");
+        service.create(ENROLLMENT_ID, "subject-1");
+        service.verify(CHALLENGE_ID, "subject-1", "000000");
+        service.verify(CHALLENGE_ID, "subject-1", "000000");
+        service.verify(CHALLENGE_ID, "subject-1", "000000");
         provider.resetVerificationCalls();
 
-        ChallengeResult result = service.verify(CHALLENGE_ID, "123456");
+        ChallengeResult result = service.verify(CHALLENGE_ID, "subject-1", "123456");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.EXHAUSTED);
         assertThat(provider.verificationCalls()).isZero();
@@ -120,10 +120,10 @@ class MfaChallengeServiceTest {
 
     @Test
     void expiryBoundaryFailsClosedAndDoesNotCallProvider() {
-        service.create(ENROLLMENT_ID);
+        service.create(ENROLLMENT_ID, "subject-1");
         service = serviceAt(EXPIRES_AT);
 
-        ChallengeResult result = service.verify(CHALLENGE_ID, "123456");
+        ChallengeResult result = service.verify(CHALLENGE_ID, "subject-1", "123456");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.EXPIRED);
         assertThat(result.challengeStatus()).isEqualTo(ChallengeStatus.EXPIRED);
@@ -132,10 +132,10 @@ class MfaChallengeServiceTest {
 
     @Test
     void timeAfterExpiryAlsoFailsClosed() {
-        service.create(ENROLLMENT_ID);
+        service.create(ENROLLMENT_ID, "subject-1");
         service = serviceAt(EXPIRES_AT.plusNanos(1));
 
-        ChallengeResult result = service.verify(CHALLENGE_ID, "123456");
+        ChallengeResult result = service.verify(CHALLENGE_ID, "subject-1", "123456");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.EXPIRED);
         assertThat(provider.verificationCalls()).isZero();
@@ -143,19 +143,19 @@ class MfaChallengeServiceTest {
 
     @Test
     void rejectsCodeWhenVerificationPassesTheExpiryBoundary() {
-        service.create(ENROLLMENT_ID);
+        service.create(ENROLLMENT_ID, "subject-1");
         provider.setVerificationResult(true);
         provider.setBeforeReturn(() -> clock.advanceTo(EXPIRES_AT));
 
-        ChallengeResult result = service.verify(CHALLENGE_ID, "123456");
+        ChallengeResult result = service.verify(CHALLENGE_ID, "subject-1", "123456");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.EXPIRED);
         assertThat(result.challengeStatus()).isEqualTo(ChallengeStatus.EXPIRED);
     }
 
     @Test
-    void expiryIsAppliedBeforeEnrollmentLookup() {
-        service.create(ENROLLMENT_ID);
+    void missingEnrollmentIsCheckedBeforeExpiry() {
+        service.create(ENROLLMENT_ID, "subject-1");
         service = new MfaChallengeService(
                 new EmptyEnrollmentStore(),
                 challengeStore,
@@ -165,20 +165,20 @@ class MfaChallengeServiceTest {
                 Duration.ofMinutes(5),
                 3);
 
-        ChallengeResult result = service.verify(CHALLENGE_ID, "123456");
+        ChallengeResult result = service.verify(CHALLENGE_ID, "subject-1", "123456");
 
-        assertThat(result.status()).isEqualTo(ChallengeOutcome.EXPIRED);
-        assertThat(challengeStore.find(CHALLENGE_ID).orElseThrow().status()).isEqualTo(ChallengeStatus.EXPIRED);
+        assertThat(result.status()).isEqualTo(ChallengeOutcome.NOT_FOUND);
+        assertThat(challengeStore.find(CHALLENGE_ID).orElseThrow().status()).isEqualTo(ChallengeStatus.OPEN);
         assertThat(provider.verificationCalls()).isZero();
     }
 
     @Test
     void validCodeConsumesChallengeAndReplayIsRejected() {
-        service.create(ENROLLMENT_ID);
+        service.create(ENROLLMENT_ID, "subject-1");
         provider.setVerificationResult(true);
 
-        ChallengeResult verified = service.verify(CHALLENGE_ID, "123456");
-        ChallengeResult replay = service.verify(CHALLENGE_ID, "123456");
+        ChallengeResult verified = service.verify(CHALLENGE_ID, "subject-1", "123456");
+        ChallengeResult replay = service.verify(CHALLENGE_ID, "subject-1", "123456");
 
         assertThat(verified.status()).isEqualTo(ChallengeOutcome.VERIFIED);
         assertThat(verified.challengeStatus()).isEqualTo(ChallengeStatus.CONSUMED);
@@ -193,7 +193,7 @@ class MfaChallengeServiceTest {
         var store = new BlockingResultChallengeStore(firstVerificationThread);
         var concurrentService =
                 new MfaChallengeService(enrollmentStore, store, provider, identifiers, clock, Duration.ofMinutes(5), 2);
-        concurrentService.create(ENROLLMENT_ID);
+        concurrentService.create(ENROLLMENT_ID, "subject-1");
         provider.setVerificationResult(false);
         var secondVerificationReady = new CountDownLatch(1);
         var firstVerification = new AtomicBoolean();
@@ -207,11 +207,11 @@ class MfaChallengeServiceTest {
         try {
             var second = executor.submit(() -> {
                 assertThat(secondVerificationReady.await(5, TimeUnit.SECONDS)).isTrue();
-                return concurrentService.verify(CHALLENGE_ID, "000000");
+                return concurrentService.verify(CHALLENGE_ID, "subject-1", "000000");
             });
             var first = executor.submit(() -> {
                 firstVerificationThread.set(Thread.currentThread().getName());
-                return concurrentService.verify(CHALLENGE_ID, "000000");
+                return concurrentService.verify(CHALLENGE_ID, "subject-1", "000000");
             });
 
             ChallengeResult firstResult;
@@ -240,9 +240,29 @@ class MfaChallengeServiceTest {
 
     @Test
     void unknownChallengeFailsWithoutCallingProvider() {
-        ChallengeResult result = service.verify(new ChallengeId("missing"), "123456");
+        ChallengeResult result = service.verify(new ChallengeId("missing"), "subject-1", "123456");
 
         assertThat(result.status()).isEqualTo(ChallengeOutcome.NOT_FOUND);
+        assertThat(provider.verificationCalls()).isZero();
+    }
+
+    @Test
+    void foreignSubjectCannotCreateChallenge() {
+        ChallengeResult result = service.create(ENROLLMENT_ID, "subject-2");
+
+        assertThat(result.status()).isEqualTo(ChallengeOutcome.ENROLLMENT_NOT_FOUND);
+        assertThat(challengeStore.find(CHALLENGE_ID)).isEmpty();
+    }
+
+    @Test
+    void foreignSubjectCannotVerifyChallenge() {
+        service.create(ENROLLMENT_ID, "subject-1");
+        service = serviceAt(EXPIRES_AT);
+
+        ChallengeResult result = service.verify(CHALLENGE_ID, "subject-2", "123456");
+
+        assertThat(result.status()).isEqualTo(ChallengeOutcome.NOT_FOUND);
+        assertThat(result.challengeStatus()).isEqualTo(ChallengeStatus.OPEN);
         assertThat(provider.verificationCalls()).isZero();
     }
 

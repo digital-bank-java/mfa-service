@@ -121,6 +121,73 @@ class MfaApiIT {
     }
 
     @Test
+    void bindsEnrollmentToAuthenticatedSubjectInsteadOfRequestSubject() throws Exception {
+        var enrollmentResponse = sendAuthorizedJson("POST", "/api/v1/mfa/enrollments", """
+                {
+                  "subjectId": "subject-2"
+                }
+                """);
+        var enrollmentId = objectMapper
+                .readTree(enrollmentResponse.body())
+                .path("enrollmentId")
+                .asText();
+
+        var foreignVerification = sendAuthorizedJson(
+                "POST",
+                "/api/v1/mfa/enrollments/" + enrollmentId + "/verifications",
+                """
+                {
+                  "code": "123456"
+                }
+                """,
+                TestSecurityConfig.FOREIGN_BEARER_TOKEN);
+
+        assertResourceNotFound(foreignVerification);
+
+        var ownerVerification =
+                sendAuthorizedJson("POST", "/api/v1/mfa/enrollments/" + enrollmentId + "/verifications", """
+                {
+                  "code": "123456"
+                }
+                """);
+
+        assertThat(ownerVerification.statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void rejectsForeignPrincipalFromEnrollmentAndChallengeOperations() throws Exception {
+        var enrollmentId = activateEnrollment();
+        var challengeResponse = sendAuthorizedJson("POST", "/api/v1/mfa/challenges", """
+                {
+                  "enrollmentId": "%s"
+                }
+                """.formatted(enrollmentId));
+        var challengeId = objectMapper
+                .readTree(challengeResponse.body())
+                .path("challengeId")
+                .asText();
+
+        var foreignChallengeCreation = sendAuthorizedJson(
+                "POST", "/api/v1/mfa/challenges", """
+                {
+                  "enrollmentId": "%s"
+                }
+                """.formatted(enrollmentId), TestSecurityConfig.FOREIGN_BEARER_TOKEN);
+        assertResourceNotFound(foreignChallengeCreation);
+
+        var foreignChallengeVerification = sendAuthorizedJson(
+                "POST",
+                "/api/v1/mfa/challenges/" + challengeId + "/verifications",
+                """
+                {
+                  "code": "123456"
+                }
+                """,
+                TestSecurityConfig.FOREIGN_BEARER_TOKEN);
+        assertResourceNotFound(foreignChallengeVerification);
+    }
+
+    @Test
     void rejectsUnauthenticatedRequestsForAllMfaEndpoints() throws Exception {
         assertAuthenticationProblem(sendJson("POST", "/api/v1/mfa/enrollments", """
                         {
@@ -282,6 +349,14 @@ class MfaApiIT {
                         .path("properties")
                         .has("provisioningUri"))
                 .isFalse();
+        var createEnrollmentSchema = openApi.path("components").path("schemas").path("CreateEnrollmentRequest");
+        assertThat(createEnrollmentSchema
+                        .path("properties")
+                        .path("subjectId")
+                        .path("deprecated")
+                        .asBoolean())
+                .isTrue();
+        assertThat(createEnrollmentSchema.path("required").isArray()).isFalse();
         assertThat(openApi.path("paths")
                         .path("/api/v1/mfa/enrollments")
                         .path("post")
@@ -460,7 +535,20 @@ class MfaApiIT {
     }
 
     private HttpResponse<String> sendAuthorizedJson(String method, String path, String body) throws Exception {
-        return sendJson(method, path, body, "Bearer " + TestSecurityConfig.TEST_BEARER_TOKEN);
+        return sendAuthorizedJson(method, path, body, TestSecurityConfig.TEST_BEARER_TOKEN);
+    }
+
+    private HttpResponse<String> sendAuthorizedJson(String method, String path, String body, String token)
+            throws Exception {
+        return sendJson(method, path, body, "Bearer " + token);
+    }
+
+    private void assertResourceNotFound(HttpResponse<String> response) throws Exception {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertContentType(response, "application/problem+json");
+        var problem = objectMapper.readTree(response.body());
+        assertThat(problem.path("type").asText()).isEqualTo("urn:digital-bank:mfa:resource-not-found");
+        assertThat(problem.path("title").asText()).isEqualTo("MFA resource not found");
     }
 
     private HttpResponse<String> sendJson(String method, String path, String body, String authorizationHeader)
