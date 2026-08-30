@@ -29,6 +29,13 @@ class JwtDecoderConfiguration {
         return JwtDecoders.fromIssuerLocation(issuerUri);
     }
 
+    @Bean
+    @ConditionalOnProperty("spring.security.oauth2.resourceserver.jwt.jwk-set-uri")
+    Object requireIssuerForExplicitJwkSet(Environment environment) {
+        requiredProperty(environment, "spring.security.oauth2.resourceserver.jwt.issuer-uri");
+        return new Object();
+    }
+
     private static String requiredProperty(Environment environment, String propertyName) {
         String value = environment.getProperty(propertyName);
         if (value == null || value.isBlank()) {

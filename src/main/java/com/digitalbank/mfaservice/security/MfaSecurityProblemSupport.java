@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
@@ -52,6 +53,9 @@ class MfaSecurityProblemSupport implements AuthenticationEntryPoint, AccessDenie
         response.setStatus(status.value());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        if (status == HttpStatus.UNAUTHORIZED) {
+            response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+        }
         var body = Map.of(
                 "type", type.toString(),
                 "title", title,

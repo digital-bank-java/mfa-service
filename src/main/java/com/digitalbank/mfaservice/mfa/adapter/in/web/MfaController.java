@@ -7,6 +7,7 @@ import com.digitalbank.mfaservice.mfa.application.TotpEnrollmentService;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeId;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -266,6 +267,11 @@ class MfaController {
     @ApiResponse(
             responseCode = "401",
             description = "Authentication required",
+            headers =
+                    @Header(
+                            name = "WWW-Authenticate",
+                            description = "Bearer authentication challenge returned for authentication failures.",
+                            schema = @Schema(type = "string", example = "Bearer")),
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
@@ -327,6 +333,12 @@ class MfaController {
     @ApiResponse(
             responseCode = "401",
             description = "Authentication required or invalid MFA code",
+            headers =
+                    @Header(
+                            name = "WWW-Authenticate",
+                            description =
+                                    "Bearer authentication challenge returned when the bearer token is invalid or absent.",
+                            schema = @Schema(type = "string", example = "Bearer")),
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
@@ -399,6 +411,11 @@ class MfaController {
     @ApiResponse(
             responseCode = "401",
             description = "Authentication required",
+            headers =
+                    @Header(
+                            name = "WWW-Authenticate",
+                            description = "Bearer authentication challenge returned for authentication failures.",
+                            schema = @Schema(type = "string", example = "Bearer")),
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
@@ -471,6 +488,12 @@ class MfaController {
     @ApiResponse(
             responseCode = "401",
             description = "Authentication required or verification failed",
+            headers =
+                    @Header(
+                            name = "WWW-Authenticate",
+                            description =
+                                    "Bearer authentication challenge returned when the bearer token is invalid or absent.",
+                            schema = @Schema(type = "string", example = "Bearer")),
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,

@@ -386,6 +386,7 @@ class MfaApiIT {
 
     private void assertAuthenticationProblem(HttpResponse<String> response, String expectedInstance) throws Exception {
         assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(response.headers().firstValue("www-authenticate")).hasValue("Bearer");
         assertContentType(response, "application/problem+json");
         var problem = objectMapper.readTree(response.body());
         assertThat(problem.path("type").asText()).isEqualTo("urn:digital-bank:mfa:authentication-required");
