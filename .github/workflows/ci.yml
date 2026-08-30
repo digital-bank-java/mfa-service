@@ -103,6 +103,8 @@ jobs:
                       "name": "ci",
                       "source": {
                           "server.port": 8087,
+                          "spring.security.oauth2.resourceserver.jwt.issuer-uri": "https://issuer.test.internal",
+                          "spring.security.oauth2.resourceserver.jwt.jwk-set-uri": "http://host.docker.internal:8888/jwks",
                       },
                   }
               ],
@@ -163,3 +165,9 @@ jobs:
             docker logs mfa-service-ci
             exit 1
           fi
+
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --data '{"subjectId":"subject-ci"}' \
+            http://localhost:8087/api/v1/mfa/enrollments)" = "401"

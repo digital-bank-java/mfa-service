@@ -7,6 +7,7 @@ import com.digitalbank.mfaservice.mfa.application.port.TotpProvider;
 import com.digitalbank.mfaservice.mfa.domain.Challenge;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeId;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeStatus;
+import com.digitalbank.mfaservice.mfa.domain.ChallengeVerification;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeVerificationStatus;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentStatus;
@@ -77,17 +78,18 @@ public final class MfaChallengeService {
             return result(ChallengeOutcome.NOT_FOUND, challengeId);
         }
         var record = challenge.orElseThrow();
-        var now = clock.instant();
-        if (record.status() != ChallengeStatus.OPEN || !now.isBefore(record.expiresAt())) {
-            var verification = record.verify(now, () -> false);
-            return result(mapOutcome(verification), challengeId);
+        if (record.status() != ChallengeStatus.OPEN || !clock.instant().isBefore(record.expiresAt())) {
+            var verification = record.verify(clock::instant, ignored -> false);
+            return result(record, verification);
         }
         var enrollment = enrollmentStore.find(record.enrollmentId());
         if (enrollment.isEmpty()) {
             return result(ChallengeOutcome.ENROLLMENT_NOT_FOUND, challengeId);
         }
-        var verification = record.verify(now, () -> enrollment.orElseThrow().verifyActive(totpProvider, code, now));
-        return result(mapOutcome(verification), challengeId);
+        var verification = record.verify(
+                clock::instant,
+                verificationAt -> enrollment.orElseThrow().verifyActive(totpProvider, code, verificationAt));
+        return result(record, verification);
     }
 
     private ChallengeResult result(ChallengeOutcome outcome, ChallengeId challengeId) {
@@ -103,6 +105,15 @@ public final class MfaChallengeService {
                         challenge.expiresAt(),
                         challenge.remainingAttempts()))
                 .orElse(new ChallengeResult(outcome, challengeId, null, null, 0));
+    }
+
+    private ChallengeResult result(Challenge record, ChallengeVerification verification) {
+        return new ChallengeResult(
+                mapOutcome(verification.status()),
+                record.id(),
+                verification.challengeStatus(),
+                record.expiresAt(),
+                verification.remainingAttempts());
     }
 
     private static ChallengeOutcome mapOutcome(ChallengeVerificationStatus status) {

@@ -310,6 +310,18 @@ class MfaApiIT {
                         .asText())
                 .isEqualTo("/api/v1/mfa/enrollments/enrollment-1/verifications");
         assertThat(verifyEnrollmentResponses
+                        .path("400")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("validation-error")
+                        .path("value")
+                        .path("errors")
+                        .get(0)
+                        .path("message")
+                        .asText())
+                .isEqualTo("must contain exactly 6 digits");
+        assertThat(verifyEnrollmentResponses
                         .path("401")
                         .path("content")
                         .path("application/problem+json")
@@ -382,6 +394,18 @@ class MfaApiIT {
                         .path("remainingAttempts")
                         .asInt())
                 .isEqualTo(4);
+        assertThat(verifyChallengeResponses
+                        .path("400")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("validation-error")
+                        .path("value")
+                        .path("errors")
+                        .get(0)
+                        .path("message")
+                        .asText())
+                .isEqualTo("must contain exactly 6 digits");
     }
 
     private void assertAuthenticationProblem(HttpResponse<String> response, String expectedInstance) throws Exception {

@@ -58,7 +58,7 @@ class MfaController {
               "errors": [
                 {
                   "field": "code",
-                  "message": "must match \\\\d{6}"
+                  "message": "must contain exactly 6 digits"
                 }
               ]
             }
@@ -90,7 +90,7 @@ class MfaController {
               "errors": [
                 {
                   "field": "code",
-                  "message": "must match \\\\d{6}"
+                  "message": "must contain exactly 6 digits"
                 }
               ]
             }
