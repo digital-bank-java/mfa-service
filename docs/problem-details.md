@@ -31,8 +31,8 @@ The service uses `application/problem+json` and this shape for expected MFA fail
 | `ENROLLMENT_NOT_ACTIVE` | `409` | `urn:digital-bank:mfa:enrollment-not-active` | Challenge creation was attempted before enrollment activation. |
 | `ALREADY_ACTIVE` | `409` | `urn:digital-bank:mfa:enrollment-already-active` | Enrollment activation was attempted after activation. |
 
-Enrollment creation returns one-time authenticator provisioning material as an `otpauth://` URI and never returns the raw secret directly. Later enrollment verification responses and challenge responses do not return reusable provisioning material. Invalid-code and exhausted challenge responses may include `remainingAttempts` only when that metadata is available from the challenge workflow.
+Enrollment and challenge success responses never return TOTP secrets or authenticator provisioning material. Invalid-code and exhausted challenge responses may include `remainingAttempts` only when that metadata is available from the challenge workflow.
 
 ## Transport Ownership
 
-Authentication headers, rate limits, gateway routes, and auth-service orchestration belong to later integration work. The application/domain foundation remains usable without Spring MVC or an HTTP request context.
+The HTTP adapter now requires bearer JWT authentication on `/api/v1/mfa/**` through Spring Security's resource-server support. Platform-owned issuer/JWK configuration is still an external dependency. Rate limits, gateway routes, authenticator provisioning UX, and auth-service orchestration remain later integration work. The application/domain foundation remains usable without Spring MVC or an HTTP request context.

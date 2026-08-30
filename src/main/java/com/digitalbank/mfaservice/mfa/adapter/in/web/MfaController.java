@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Validated
 @Tag(name = "MFA")
+@SecurityRequirement(name = "bearer-jwt")
 class MfaController {
 
     private static final String VALIDATION_PROBLEM_EXAMPLE = """

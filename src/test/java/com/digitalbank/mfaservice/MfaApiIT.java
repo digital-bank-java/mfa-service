@@ -18,7 +18,7 @@ import org.springframework.context.annotation.Primary;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        classes = {MfaServiceApplication.class, MfaApiIT.TestConfig.class})
+        classes = {MfaServiceApplication.class, MfaApiIT.TestConfig.class, TestSecurityConfig.class})
 class MfaApiIT {
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -29,7 +29,7 @@ class MfaApiIT {
 
     @Test
     void enrollsActivatesCreatesChallengeAndVerifies() throws Exception {
-        var enrollmentResponse = sendJson("POST", "/api/v1/mfa/enrollments", """
+        var enrollmentResponse = sendAuthorizedJson("POST", "/api/v1/mfa/enrollments", """
                 {
                   "subjectId": "subject-1"
                 }
@@ -42,13 +42,12 @@ class MfaApiIT {
         var enrollment = objectMapper.readTree(enrollmentResponse.body());
         assertThat(enrollment.path("status").asText()).isEqualTo("ENROLLED");
         assertThat(enrollment.path("enrollmentStatus").asText()).isEqualTo("PENDING");
-        assertThat(enrollment.path("provisioningUri").asText())
-                .startsWith("otpauth://totp/")
-                .contains("secret=TEST-SECRET")
-                .contains("subject-1");
+        assertThat(enrollment.has("provisioningUri")).isFalse();
+        assertThat(enrollmentResponse.body()).doesNotContain("TEST-SECRET");
         var enrollmentId = enrollment.path("enrollmentId").asText();
 
-        var activationResponse = sendJson("POST", "/api/v1/mfa/enrollments/" + enrollmentId + "/verifications", """
+        var activationResponse =
+                sendAuthorizedJson("POST", "/api/v1/mfa/enrollments/" + enrollmentId + "/verifications", """
                 {
                   "code": "123456"
                 }
@@ -62,7 +61,7 @@ class MfaApiIT {
         assertThat(activated.path("enrollmentStatus").asText()).isEqualTo("ACTIVE");
         assertThat(activated.has("provisioningUri")).isFalse();
 
-        var challengeResponse = sendJson("POST", "/api/v1/mfa/challenges", """
+        var challengeResponse = sendAuthorizedJson("POST", "/api/v1/mfa/challenges", """
                 {
                   "enrollmentId": "%s"
                 }
@@ -78,7 +77,8 @@ class MfaApiIT {
         assertThat(challenge.path("remainingAttempts").asInt()).isEqualTo(5);
         var challengeId = challenge.path("challengeId").asText();
 
-        var verificationResponse = sendJson("POST", "/api/v1/mfa/challenges/" + challengeId + "/verifications", """
+        var verificationResponse =
+                sendAuthorizedJson("POST", "/api/v1/mfa/challenges/" + challengeId + "/verifications", """
                 {
                   "code": "123456"
                 }
@@ -96,7 +96,7 @@ class MfaApiIT {
     @Test
     void returnsProblemForInvalidChallengeCode() throws Exception {
         var enrollmentId = activateEnrollment();
-        var challengeResponse = sendJson("POST", "/api/v1/mfa/challenges", """
+        var challengeResponse = sendAuthorizedJson("POST", "/api/v1/mfa/challenges", """
                 {
                   "enrollmentId": "%s"
                 }
@@ -106,7 +106,7 @@ class MfaApiIT {
                 .path("challengeId")
                 .asText();
 
-        var response = sendJson("POST", "/api/v1/mfa/challenges/" + challengeId + "/verifications", """
+        var response = sendAuthorizedJson("POST", "/api/v1/mfa/challenges/" + challengeId + "/verifications", """
                 {
                   "code": "000000"
                 }
@@ -121,8 +121,37 @@ class MfaApiIT {
     }
 
     @Test
+    void rejectsUnauthenticatedRequestsForAllMfaEndpoints() throws Exception {
+        assertThat(sendJson("POST", "/api/v1/mfa/enrollments", """
+                        {
+                          "subjectId": "subject-1"
+                        }
+                        """).statusCode())
+                .isEqualTo(401);
+        assertThat(sendJson("POST", "/api/v1/mfa/enrollments/enrollment-1/verifications", """
+                        {
+                          "code": "123456"
+                        }
+                        """)
+                        .statusCode())
+                .isEqualTo(401);
+        assertThat(sendJson("POST", "/api/v1/mfa/challenges", """
+                        {
+                          "enrollmentId": "enrollment-1"
+                        }
+                        """).statusCode()).isEqualTo(401);
+        assertThat(sendJson("POST", "/api/v1/mfa/challenges/challenge-1/verifications", """
+                        {
+                          "code": "123456"
+                        }
+                        """)
+                        .statusCode())
+                .isEqualTo(401);
+    }
+
+    @Test
     void rejectsInvalidVerificationRequest() throws Exception {
-        var response = sendJson("POST", "/api/v1/mfa/enrollments/enrollment-1/verifications", """
+        var response = sendAuthorizedJson("POST", "/api/v1/mfa/enrollments/enrollment-1/verifications", """
                 {
                   "code": "12A"
                 }
@@ -139,7 +168,7 @@ class MfaApiIT {
 
     @Test
     void rejectsMalformedEnrollmentRequest() throws Exception {
-        var response = sendJson("POST", "/api/v1/mfa/enrollments", """
+        var response = sendAuthorizedJson("POST", "/api/v1/mfa/enrollments", """
                 {
                   "subjectId":
                 }
@@ -168,6 +197,12 @@ class MfaApiIT {
         assertThat(openApi.path("paths").has("/api/v1/mfa/challenges")).isTrue();
         assertThat(openApi.path("paths").has("/api/v1/mfa/challenges/{challengeId}/verifications"))
                 .isTrue();
+        assertThat(openApi.path("components")
+                        .path("securitySchemes")
+                        .path("bearer-jwt")
+                        .path("scheme")
+                        .asText())
+                .isEqualTo("bearer");
 
         var enrollResponses = openApi.path("paths")
                 .path("/api/v1/mfa/enrollments")
@@ -180,6 +215,12 @@ class MfaApiIT {
                         .path("EnrollmentResponse")
                         .path("properties")
                         .has("provisioningUri"))
+                .isFalse();
+        assertThat(openApi.path("paths")
+                        .path("/api/v1/mfa/enrollments")
+                        .path("post")
+                        .path("security")
+                        .isArray())
                 .isTrue();
         assertThat(enrollResponses.path("400").path("content").has("application/problem+json"))
                 .isTrue();
@@ -235,7 +276,7 @@ class MfaApiIT {
     }
 
     private String activateEnrollment() throws Exception {
-        var enrollmentResponse = sendJson("POST", "/api/v1/mfa/enrollments", """
+        var enrollmentResponse = sendAuthorizedJson("POST", "/api/v1/mfa/enrollments", """
                 {
                   "subjectId": "subject-it"
                 }
@@ -244,7 +285,8 @@ class MfaApiIT {
                 .readTree(enrollmentResponse.body())
                 .path("enrollmentId")
                 .asText();
-        var activationResponse = sendJson("POST", "/api/v1/mfa/enrollments/" + enrollmentId + "/verifications", """
+        var activationResponse =
+                sendAuthorizedJson("POST", "/api/v1/mfa/enrollments/" + enrollmentId + "/verifications", """
                 {
                   "code": "123456"
                 }
@@ -267,12 +309,23 @@ class MfaApiIT {
     }
 
     private HttpResponse<String> sendJson(String method, String path, String body) throws Exception {
+        return sendJson(method, path, body, null);
+    }
+
+    private HttpResponse<String> sendAuthorizedJson(String method, String path, String body) throws Exception {
+        return sendJson(method, path, body, "Bearer " + TestSecurityConfig.TEST_BEARER_TOKEN);
+    }
+
+    private HttpResponse<String> sendJson(String method, String path, String body, String authorizationHeader)
+            throws Exception {
         var request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")
-                .method(method, HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                .method(method, HttpRequest.BodyPublishers.ofString(body));
+        if (authorizationHeader != null) {
+            request.header("Authorization", authorizationHeader);
+        }
+        return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @TestConfiguration
@@ -290,12 +343,6 @@ class MfaApiIT {
                 @Override
                 public boolean verify(String secret, String code, Instant at) {
                     return "TEST-SECRET".equals(secret) && "123456".equals(code);
-                }
-
-                @Override
-                public String provisioningUri(String secret, String subjectId) {
-                    return "otpauth://totp/Digital%%20Bank:%s?secret=%s&issuer=Digital%%20Bank"
-                            .formatted(subjectId, secret);
                 }
             };
         }

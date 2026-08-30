@@ -29,15 +29,12 @@ class TotpEnrollmentServiceTest {
     }
 
     @Test
-    void enrollmentCreatesPendingRecordWithOneTimeProvisioningUriWithoutDisclosingSecretInToString() {
+    void enrollmentCreatesPendingRecordWithoutDisclosingSecretInResultsOrToString() {
         EnrollmentResult result = service.enroll("subject-1");
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.ENROLLED);
         assertThat(result.enrollmentId()).isEqualTo(ENROLLMENT_ID);
         assertThat(result.enrollmentStatus()).isEqualTo(EnrollmentStatus.PENDING);
-        assertThat(result.provisioningUri())
-                .isEqualTo(
-                        "otpauth://totp/Digital%%20Bank:subject-1?secret=%s&issuer=Digital%%20Bank".formatted(SECRET));
         assertThat(result.toString()).doesNotContain(SECRET);
         assertThat(store.find(ENROLLMENT_ID).orElseThrow().toString()).doesNotContain(SECRET);
     }
@@ -51,7 +48,6 @@ class TotpEnrollmentServiceTest {
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.ACTIVATED);
         assertThat(result.enrollmentStatus()).isEqualTo(EnrollmentStatus.ACTIVE);
-        assertThat(result.provisioningUri()).isNull();
         assertThat(store.find(ENROLLMENT_ID).orElseThrow().status()).isEqualTo(EnrollmentStatus.ACTIVE);
         assertThat(provider.lastVerifiedSecret()).isEqualTo(SECRET);
         assertThat(provider.lastVerifiedInstant()).isEqualTo(NOW);
@@ -66,7 +62,6 @@ class TotpEnrollmentServiceTest {
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.INVALID_CODE);
         assertThat(result.enrollmentStatus()).isEqualTo(EnrollmentStatus.PENDING);
-        assertThat(result.provisioningUri()).isNull();
         assertThat(store.find(ENROLLMENT_ID).orElseThrow().status()).isEqualTo(EnrollmentStatus.PENDING);
     }
 

@@ -68,8 +68,7 @@ class MfaControllerTest {
                 .andExpect(jsonPath("$.status").value("ENROLLED"))
                 .andExpect(jsonPath("$.enrollmentId").value("enrollment-1"))
                 .andExpect(jsonPath("$.enrollmentStatus").value("PENDING"))
-                .andExpect(jsonPath("$.provisioningUri")
-                        .value("otpauth://totp/Digital%20Bank:subject-1?secret=TEST-SECRET&issuer=Digital%20Bank"));
+                .andExpect(jsonPath("$.provisioningUri").doesNotExist());
     }
 
     @Test
@@ -184,11 +183,6 @@ class MfaControllerTest {
         @Override
         public boolean verify(String secret, String code, Instant at) {
             return "TEST-SECRET".equals(secret) && "123456".equals(code);
-        }
-
-        @Override
-        public String provisioningUri(String secret, String subjectId) {
-            return "otpauth://totp/Digital%%20Bank:%s?secret=%s&issuer=Digital%%20Bank".formatted(subjectId, secret);
         }
     }
 }
