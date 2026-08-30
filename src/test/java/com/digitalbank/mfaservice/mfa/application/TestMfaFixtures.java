@@ -43,6 +43,10 @@ final class TestMfaFixtures {
             return verificationCalls;
         }
 
+        void resetVerificationCalls() {
+            verificationCalls = 0;
+        }
+
         String lastVerifiedSecret() {
             return lastVerifiedSecret;
         }

@@ -55,6 +55,12 @@ public final class Enrollment {
         return true;
     }
 
+    public synchronized boolean verifyActive(TotpCodeVerifier verifier, String code, Instant at) {
+        Objects.requireNonNull(verifier, "verifier");
+        Objects.requireNonNull(at, "at");
+        return status == EnrollmentStatus.ACTIVE && credential.verify(verifier, code, at);
+    }
+
     @Override
     public synchronized String toString() {
         return "Enrollment[id=%s, subjectId=%s, createdAt=%s, status=%s]".formatted(id, subjectId, createdAt, status);
