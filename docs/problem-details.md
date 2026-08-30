@@ -1,10 +1,10 @@
 # MFA Problem Details Guidance
 
-This release does not expose enrollment or challenge HTTP routes. The application services return typed outcomes so a future inbound adapter can publish stable [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) Problem Details without coupling the domain to HTTP.
+The MFA HTTP adapter publishes stable [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) Problem Details on top of the application outcomes without coupling the domain to HTTP.
 
 ## Response Shape
 
-Future HTTP adapters should use `application/problem+json` and this shape for expected MFA failures:
+The service uses `application/problem+json` and this shape for expected MFA failures:
 
 ```json
 {
@@ -12,7 +12,7 @@ Future HTTP adapters should use `application/problem+json` and this shape for ex
   "title": "MFA challenge expired",
   "status": 401,
   "detail": "The MFA challenge is no longer valid.",
-  "instance": "/mfa/challenges/opaque-id"
+  "instance": "/api/v1/mfa/challenges/opaque-id/verifications"
 }
 ```
 
@@ -20,18 +20,19 @@ Future HTTP adapters should use `application/problem+json` and this shape for ex
 
 ## Stable Types
 
-| Application outcome | Problem type | Meaning |
-| --- | --- | --- |
-| `NOT_FOUND` | `urn:digital-bank:mfa:resource-not-found` | The requested enrollment or challenge is unknown. |
-| `INVALID_CODE` | `urn:digital-bank:mfa:invalid-code` | The code was invalid and the challenge remains open. |
-| `EXPIRED` | `urn:digital-bank:mfa:challenge-expired` | The challenge failed closed at or after its expiry instant. |
-| `EXHAUSTED` | `urn:digital-bank:mfa:challenge-exhausted` | The challenge consumed its bounded attempt budget. |
-| `REPLAYED` | `urn:digital-bank:mfa:challenge-replayed` | A consumed challenge was presented again. |
-| `ENROLLMENT_NOT_ACTIVE` | `urn:digital-bank:mfa:enrollment-not-active` | Challenge creation was attempted before enrollment activation. |
-| `ALREADY_ACTIVE` | `urn:digital-bank:mfa:enrollment-already-active` | Enrollment activation was attempted after activation. |
+| Application outcome | HTTP status | Problem type | Meaning |
+| --- | --- | --- | --- |
+| Validation failure | `400` | `https://digital-bank-java.local/problems/validation-error` | The request body or parameters failed boundary validation. |
+| `NOT_FOUND` | `404` | `urn:digital-bank:mfa:resource-not-found` | The requested enrollment or challenge is unknown. |
+| `INVALID_CODE` | `401` | `urn:digital-bank:mfa:invalid-code` | The code was invalid and the challenge remains open. |
+| `EXPIRED` | `401` | `urn:digital-bank:mfa:challenge-expired` | The challenge failed closed at or after its expiry instant. |
+| `EXHAUSTED` | `401` | `urn:digital-bank:mfa:challenge-exhausted` | The challenge consumed its bounded attempt budget. |
+| `REPLAYED` | `401` | `urn:digital-bank:mfa:challenge-replayed` | A consumed challenge was presented again. |
+| `ENROLLMENT_NOT_ACTIVE` | `409` | `urn:digital-bank:mfa:enrollment-not-active` | Challenge creation was attempted before enrollment activation. |
+| `ALREADY_ACTIVE` | `409` | `urn:digital-bank:mfa:enrollment-already-active` | Enrollment activation was attempted after activation. |
 
-Successful enrollment and challenge operations return opaque metadata and lifecycle status only. They never return the TOTP secret.
+Successful enrollment and challenge operations return opaque metadata and lifecycle status only. They never return the TOTP secret. Invalid-code and exhausted challenge responses may include `remainingAttempts` when that metadata is available.
 
 ## Transport Ownership
 
-Mapping HTTP status codes, authentication headers, rate limits, gateway routes, and auth-service orchestration belongs to a later integration task. The application/domain foundation must remain usable without Spring MVC or an HTTP request context.
+Authentication headers, rate limits, gateway routes, and auth-service orchestration belong to later integration work. The application/domain foundation remains usable without Spring MVC or an HTTP request context.

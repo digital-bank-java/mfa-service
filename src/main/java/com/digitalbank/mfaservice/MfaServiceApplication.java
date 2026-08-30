@@ -12,7 +12,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
                         title = "Digital Bank Multi-Factor Authentication Service API",
                         version = "1.0.0",
                         description =
-                                "Internal metadata for the transport-neutral MFA foundation. This release exposes no enrollment or challenge HTTP routes; application ports and in-memory adapters are available for later integration."))
+                                "MFA enrollment and challenge verification APIs for the Digital Bank Java platform. This release exposes the HTTP input adapter on top of the existing in-memory MFA foundation."))
 @SpringBootApplication
 @ConfigurationPropertiesScan
 public class MfaServiceApplication {

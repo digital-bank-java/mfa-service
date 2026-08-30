@@ -2,17 +2,17 @@
 
 ## Purpose
 
-`mfa-service` is the foundation for multi-factor authentication workflows and provider integration boundaries. It contains transport-neutral TOTP enrollment and bounded challenge application services with in-memory adapters; HTTP integration remains separately planned and tracked.
+`mfa-service` is the foundation for multi-factor authentication workflows and provider integration boundaries. It contains transport-neutral TOTP enrollment and bounded challenge application services with in-memory adapters plus the HTTP input adapter for enrollment and challenge verification.
 
 ## Current Boundaries
 
 - Owns service bootstrap, Config Client, health probes, OpenAPI metadata, packaging, and deployment.
-- Owns TOTP enrollment activation and challenge state transitions through Java application ports.
+- Owns TOTP enrollment activation, challenge state transitions, and the HTTP input adapter that exposes those workflows.
 - In-memory stores are foundation adapters only; do not treat them as durable production persistence.
 - TOTP secrets are write-only at the application result boundary and must not be logged, returned, or added to tests as output assertions.
 - Challenge verification must fail at `now >= expiresAt`, enforce the attempt limit, and reject replay after consumption.
 - Does not own customer identity data, login orchestration, recovery codes, Kafka behavior, durable persistence, or authorization decisions.
-- Do not add public MFA routes without a supporting issue and API contract work.
+- Public MFA routes require a supporting issue, boundary DTO validation, and documented Problem Details mapping.
 
 ## Commands
 
