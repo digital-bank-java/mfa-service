@@ -6,6 +6,7 @@ import com.digitalbank.mfaservice.mfa.application.port.MfaIdentifierGenerator;
 import com.digitalbank.mfaservice.mfa.application.port.TotpProvider;
 import com.digitalbank.mfaservice.mfa.domain.Challenge;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeId;
+import com.digitalbank.mfaservice.mfa.domain.ChallengeStatus;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeVerificationStatus;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentStatus;
@@ -76,11 +77,15 @@ public final class MfaChallengeService {
             return result(ChallengeOutcome.NOT_FOUND, challengeId);
         }
         var record = challenge.orElseThrow();
+        var now = clock.instant();
+        if (record.status() != ChallengeStatus.OPEN || !now.isBefore(record.expiresAt())) {
+            var verification = record.verify(now, () -> false);
+            return result(mapOutcome(verification), challengeId);
+        }
         var enrollment = enrollmentStore.find(record.enrollmentId());
         if (enrollment.isEmpty()) {
             return result(ChallengeOutcome.ENROLLMENT_NOT_FOUND, challengeId);
         }
-        var now = clock.instant();
         var verification = record.verify(now, () -> enrollment.orElseThrow().verifyActive(totpProvider, code, now));
         return result(mapOutcome(verification), challengeId);
     }

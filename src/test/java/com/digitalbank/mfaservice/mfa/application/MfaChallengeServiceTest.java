@@ -4,13 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.digitalbank.mfaservice.mfa.adapter.memory.InMemoryChallengeStore;
 import com.digitalbank.mfaservice.mfa.adapter.memory.InMemoryEnrollmentStore;
+import com.digitalbank.mfaservice.mfa.application.port.EnrollmentStore;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeId;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeStatus;
+import com.digitalbank.mfaservice.mfa.domain.Enrollment;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -129,6 +132,25 @@ class MfaChallengeServiceTest {
     }
 
     @Test
+    void expiryIsAppliedBeforeEnrollmentLookup() {
+        service.create(ENROLLMENT_ID);
+        service = new MfaChallengeService(
+                new EmptyEnrollmentStore(),
+                challengeStore,
+                provider,
+                identifiers,
+                Clock.fixed(EXPIRES_AT, ZoneOffset.UTC),
+                Duration.ofMinutes(5),
+                3);
+
+        ChallengeResult result = service.verify(CHALLENGE_ID, "123456");
+
+        assertThat(result.status()).isEqualTo(ChallengeOutcome.EXPIRED);
+        assertThat(challengeStore.find(CHALLENGE_ID).orElseThrow().status()).isEqualTo(ChallengeStatus.EXPIRED);
+        assertThat(provider.verificationCalls()).isZero();
+    }
+
+    @Test
     void validCodeConsumesChallengeAndReplayIsRejected() {
         service.create(ENROLLMENT_ID);
         provider.setVerificationResult(true);
@@ -160,5 +182,18 @@ class MfaChallengeServiceTest {
                 Clock.fixed(instant, ZoneOffset.UTC),
                 Duration.ofMinutes(5),
                 3);
+    }
+
+    private static final class EmptyEnrollmentStore implements EnrollmentStore {
+
+        @Override
+        public void save(Enrollment enrollment) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<Enrollment> find(EnrollmentId enrollmentId) {
+            return Optional.empty();
+        }
     }
 }
