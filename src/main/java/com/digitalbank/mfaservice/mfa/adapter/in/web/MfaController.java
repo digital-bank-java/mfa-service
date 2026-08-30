@@ -45,7 +45,17 @@ class MfaController {
             }
             """;
 
-    private static final String INVALID_CODE_PROBLEM_EXAMPLE = """
+    private static final String ENROLLMENT_INVALID_CODE_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:invalid-code",
+              "title": "Invalid MFA code",
+              "status": 401,
+              "detail": "The submitted MFA code was not accepted.",
+              "instance": "/api/v1/mfa/enrollments/enrollment-1/verifications"
+            }
+            """;
+
+    private static final String CHALLENGE_INVALID_CODE_PROBLEM_EXAMPLE = """
             {
               "type": "urn:digital-bank:mfa:invalid-code",
               "title": "Invalid MFA code",
@@ -73,6 +83,16 @@ class MfaController {
               "status": 409,
               "detail": "The MFA enrollment must be active before a challenge can be created.",
               "instance": "/api/v1/mfa/challenges"
+            }
+            """;
+
+    private static final String ENROLLMENT_ALREADY_ACTIVE_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:enrollment-already-active",
+              "title": "MFA enrollment already active",
+              "status": 409,
+              "detail": "The MFA enrollment is already active.",
+              "instance": "/api/v1/mfa/enrollments/enrollment-1/verifications"
             }
             """;
 
@@ -133,7 +153,10 @@ class MfaController {
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class),
-                            examples = @ExampleObject(name = "invalid-code", value = INVALID_CODE_PROBLEM_EXAMPLE)))
+                            examples =
+                                    @ExampleObject(
+                                            name = "invalid-code",
+                                            value = ENROLLMENT_INVALID_CODE_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "404",
             description = "Enrollment not found",
@@ -155,7 +178,7 @@ class MfaController {
                             examples =
                                     @ExampleObject(
                                             name = "enrollment-already-active",
-                                            value = ENROLLMENT_CONFLICT_PROBLEM_EXAMPLE)))
+                                            value = ENROLLMENT_ALREADY_ACTIVE_PROBLEM_EXAMPLE)))
     ResponseEntity<EnrollmentResponse> verifyEnrollment(
             @PathVariable String enrollmentId, @Valid @RequestBody VerifyTotpCodeRequest request) {
         var result = enrollmentService.verify(new EnrollmentId(enrollmentId), request.code());
@@ -233,7 +256,10 @@ class MfaController {
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class),
-                            examples = @ExampleObject(name = "invalid-code", value = INVALID_CODE_PROBLEM_EXAMPLE)))
+                            examples =
+                                    @ExampleObject(
+                                            name = "invalid-code",
+                                            value = CHALLENGE_INVALID_CODE_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "404",
             description = "Challenge not found",
@@ -254,7 +280,7 @@ class MfaController {
     private static EnrollmentResponse mapEnrollmentVerificationResult(EnrollmentResult result) {
         return switch (result.status()) {
             case ACTIVATED -> EnrollmentResponse.from(result);
-            case INVALID_CODE -> throw MfaProblemException.invalidCode("The submitted MFA code was not accepted.", 0);
+            case INVALID_CODE -> throw MfaProblemException.invalidCode("The submitted MFA code was not accepted.");
             case NOT_FOUND -> throw MfaProblemException.notFound("The requested MFA enrollment does not exist.");
             case ALREADY_ACTIVE ->
                 throw MfaProblemException.enrollmentAlreadyActive("The MFA enrollment is already active.");

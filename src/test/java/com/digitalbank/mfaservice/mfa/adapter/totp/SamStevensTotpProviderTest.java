@@ -27,4 +27,16 @@ class SamStevensTotpProviderTest {
 
         assertThat(provider.generateSecret()).matches("[A-Z2-7]+");
     }
+
+    @Test
+    void generatesAuthenticatorProvisioningUri() {
+        var provider = new SamStevensTotpProvider(Clock.systemUTC());
+
+        var uri = provider.provisioningUri(RFC_6238_BASE32_SECRET, "customer-123");
+
+        assertThat(uri).startsWith("otpauth://totp/");
+        assertThat(uri).contains("secret=" + RFC_6238_BASE32_SECRET);
+        assertThat(uri).contains("issuer=");
+        assertThat(uri).contains("customer-123");
+    }
 }

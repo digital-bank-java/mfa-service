@@ -7,7 +7,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 - Java 21 Spring Boot service named `mfa-service`.
 - Spring Cloud Config Client integration for externalized runtime configuration.
 - Actuator health, liveness, and readiness probes.
-- Explicit OpenAPI metadata at `/v3/api-docs`.
+- Explicit OpenAPI metadata at `/v3/api-docs`; service-local Swagger UI is disabled.
 - TOTP enrollment and activation application ports backed by an in-memory credential adapter.
 - MFA challenge creation and verification with expiry, bounded attempts, and replay-safe terminal states.
 - HTTP APIs for MFA enrollment creation, enrollment verification, challenge creation, and challenge verification.
@@ -19,7 +19,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 
 This service will later own MFA policy and provider integration boundaries. The current implementation does not own customer identity data, login orchestration, recovery codes, Kafka behavior, durable persistence, authorization decisions, or API Gateway routing.
 
-TOTP enrollment results contain only an opaque enrollment id and lifecycle status. The generated secret is held only inside the credential store and is never returned by application results or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
+TOTP enrollment creation returns an opaque enrollment id, lifecycle status, and a one-time `otpauth://` provisioning URI for authenticator-app setup. That provisioning material is not returned by later enrollment verification responses, later reads, or aggregate `toString` output. The generated secret is held only inside the credential store. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
 
 Challenge verification is fail-closed at `now >= expiresAt`. Wrong codes consume one attempt, the final failed attempt moves the challenge to `EXHAUSTED`, a valid code moves it to `CONSUMED`, and later verification of a consumed challenge returns a replay outcome without calling the TOTP provider again. The default challenge TTL is `PT5M` and the default maximum is `5` attempts; both are configurable through `mfa.challenge.ttl` and `mfa.challenge.max-attempts` and remain subject to the 1 through 10 attempt bound.
 
@@ -57,7 +57,7 @@ The service exposes these routes directly on `mfa-service`:
 | `POST` | `/api/v1/mfa/challenges` | Create an MFA challenge for an active enrollment. |
 | `POST` | `/api/v1/mfa/challenges/{challengeId}/verifications` | Verify an MFA challenge with a 6-digit TOTP code. |
 
-Success responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. TOTP secrets and submitted codes are never returned.
+Enrollment creation returns one-time provisioning material as an `otpauth://` URI for authenticator bootstrap. Later success responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. Raw TOTP secrets and submitted codes are never returned.
 
 Representative requests:
 
@@ -88,6 +88,8 @@ curl --request POST http://localhost:8087/api/v1/mfa/challenges/<challenge-id>/v
 ```
 
 Error responses use `application/problem+json`. Validation failures return `400`, unknown resources return `404`, enrollment state conflicts return `409`, and invalid or expired challenge verification outcomes return `401`.
+
+`/v3/api-docs` remains available for internal machine-readable contract publication. Service-local Swagger UI is disabled; the platform-owned interactive documentation surface belongs at the API Gateway.
 
 Before deploying to SIT, the Config Server's backing `config-repo` should contain the `mfa-service` defaults and SIT override from config-repo PR [#32](https://github.com/digital-bank-java/config-repo/pull/32). Without those service-specific files, Config Server can still return shared configuration and the service can start with its local port default, but the intended `mfa-service` metadata is absent. The mandatory Config Client import still fails startup when Config Server itself is unavailable.
 
@@ -123,7 +125,7 @@ Run integration tests and package verification:
 ./mvnw --batch-mode --no-transfer-progress verify -DskipUnitTests=true
 ```
 
-The integration tests disable Config Client and validate health, liveness, readiness, the MFA HTTP contract, and the published OpenAPI document through `MockMvc`.
+The integration tests disable Config Client and validate health, liveness, readiness, the MFA HTTP contract, the disabled Swagger UI surface, and the published OpenAPI document through real random-port HTTP requests.
 
 ## Run With Docker
 

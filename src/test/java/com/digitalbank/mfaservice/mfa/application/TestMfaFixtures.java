@@ -35,6 +35,11 @@ final class TestMfaFixtures {
             return verificationResult;
         }
 
+        @Override
+        public String provisioningUri(String secret, String subjectId) {
+            return "otpauth://totp/Digital%%20Bank:%s?secret=%s&issuer=Digital%%20Bank".formatted(subjectId, secret);
+        }
+
         void setVerificationResult(boolean verificationResult) {
             this.verificationResult = verificationResult;
         }

@@ -1,26 +1,28 @@
 package com.digitalbank.mfaservice;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.boot.test.web.server.LocalServerPort;
 
-@AutoConfigureMockMvc
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class MfaServiceApplicationIT {
 
-    @Autowired
-    private MockMvc mockMvc;
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    @LocalServerPort
+    private int port;
 
     @Test
     void healthEndpointReportsUp() throws Exception {
         var response = getResponse("/actuator/health");
 
-        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"status\":\"UP\"");
     }
 
@@ -28,7 +30,7 @@ class MfaServiceApplicationIT {
     void livenessProbeReportsUp() throws Exception {
         var response = getResponse("/actuator/health/liveness");
 
-        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"status\":\"UP\"");
     }
 
@@ -36,7 +38,7 @@ class MfaServiceApplicationIT {
     void readinessProbeReportsUp() throws Exception {
         var response = getResponse("/actuator/health/readiness");
 
-        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"status\":\"UP\"");
     }
 
@@ -44,7 +46,7 @@ class MfaServiceApplicationIT {
     void openApiDocumentPublishesServiceMetadata() throws Exception {
         var response = getResponse("/v3/api-docs");
 
-        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body())
                 .contains("\"title\":\"Digital Bank Multi-Factor Authentication Service API\"")
                 .contains("\"version\":\"1.0.0\"")
@@ -52,10 +54,18 @@ class MfaServiceApplicationIT {
                 .contains("\"/api/v1/mfa/challenges\"");
     }
 
-    private TestResponse getResponse(String path) throws Exception {
-        var response = mockMvc.perform(get(path)).andReturn().getResponse();
-        return new TestResponse(response.getStatus(), response.getContentAsString());
+    @Test
+    void swaggerUiSurfaceIsDisabled() throws Exception {
+        var response = getResponse("/swagger-ui/index.html");
+
+        assertThat(response.statusCode()).isEqualTo(404);
     }
 
-    private record TestResponse(int status, String body) {}
+    private HttpResponse<String> getResponse(String path) throws Exception {
+        return httpClient.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+    }
 }

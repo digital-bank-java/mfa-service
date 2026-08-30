@@ -29,13 +29,21 @@ final class MfaProblemException extends RuntimeException {
                 Map.of());
     }
 
+    static MfaProblemException invalidCode(String detail) {
+        return invalidCode(detail, null);
+    }
+
     static MfaProblemException invalidCode(String detail, int remainingAttempts) {
+        return invalidCode(detail, Integer.valueOf(remainingAttempts));
+    }
+
+    private static MfaProblemException invalidCode(String detail, Integer remainingAttempts) {
         return new MfaProblemException(
                 HttpStatus.UNAUTHORIZED,
                 URI.create("urn:digital-bank:mfa:invalid-code"),
                 "Invalid MFA code",
                 detail,
-                Map.of("remainingAttempts", remainingAttempts));
+                remainingAttempts == null ? Map.of() : Map.of("remainingAttempts", remainingAttempts));
     }
 
     static MfaProblemException challengeExpired(String detail) {

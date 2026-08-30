@@ -67,7 +67,9 @@ class MfaControllerTest {
                 .andExpect(header().string("Location", "/api/v1/mfa/enrollments/enrollment-1"))
                 .andExpect(jsonPath("$.status").value("ENROLLED"))
                 .andExpect(jsonPath("$.enrollmentId").value("enrollment-1"))
-                .andExpect(jsonPath("$.enrollmentStatus").value("PENDING"));
+                .andExpect(jsonPath("$.enrollmentStatus").value("PENDING"))
+                .andExpect(jsonPath("$.provisioningUri")
+                        .value("otpauth://totp/Digital%20Bank:subject-1?secret=TEST-SECRET&issuer=Digital%20Bank"));
     }
 
     @Test
@@ -107,6 +109,22 @@ class MfaControllerTest {
     }
 
     @Test
+    void omitsRemainingAttemptsForEnrollmentVerificationFailure() throws Exception {
+        enrollmentService.enroll("subject-1");
+
+        mockMvc.perform(post("/api/v1/mfa/enrollments/enrollment-1/verifications")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "000000"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.type").value("urn:digital-bank:mfa:invalid-code"))
+                .andExpect(jsonPath("$.remainingAttempts").doesNotExist());
+    }
+
+    @Test
     void mapsChallengeVerificationFailure() throws Exception {
         enrollmentService.enroll("subject-1");
         enrollmentService.verify(ENROLLMENT_ID, "123456");
@@ -125,6 +143,22 @@ class MfaControllerTest {
                 .andExpect(jsonPath("$.type").value("urn:digital-bank:mfa:invalid-code"))
                 .andExpect(jsonPath("$.title").value("Invalid MFA code"))
                 .andExpect(jsonPath("$.remainingAttempts").value(4));
+    }
+
+    @Test
+    void rejectsMalformedJsonRequestBodyAsProblemDetails() throws Exception {
+        mockMvc.perform(post("/api/v1/mfa/enrollments")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subjectId":
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string(
+                                "Content-Type", org.hamcrest.Matchers.startsWith(APPLICATION_PROBLEM_JSON.toString())))
+                .andExpect(jsonPath("$.type").value("https://digital-bank-java.local/problems/validation-error"))
+                .andExpect(jsonPath("$.title").value("Invalid request"));
     }
 
     private static final class FixedIdentifierGenerator implements MfaIdentifierGenerator {
@@ -150,6 +184,11 @@ class MfaControllerTest {
         @Override
         public boolean verify(String secret, String code, Instant at) {
             return "TEST-SECRET".equals(secret) && "123456".equals(code);
+        }
+
+        @Override
+        public String provisioningUri(String secret, String subjectId) {
+            return "otpauth://totp/Digital%%20Bank:%s?secret=%s&issuer=Digital%%20Bank".formatted(subjectId, secret);
         }
     }
 }

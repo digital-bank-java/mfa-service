@@ -28,9 +28,14 @@ public final class TotpEnrollmentService {
 
     public EnrollmentResult enroll(String subjectId) {
         var enrollmentId = identifierGenerator.newEnrollmentId();
-        var enrollment = Enrollment.pending(enrollmentId, subjectId, totpProvider.generateSecret(), clock.instant());
+        var secret = totpProvider.generateSecret();
+        var enrollment = Enrollment.pending(enrollmentId, subjectId, secret, clock.instant());
         enrollmentStore.save(enrollment);
-        return new EnrollmentResult(EnrollmentOutcome.ENROLLED, enrollmentId, enrollment.status());
+        return new EnrollmentResult(
+                EnrollmentOutcome.ENROLLED,
+                enrollmentId,
+                enrollment.status(),
+                totpProvider.provisioningUri(secret, subjectId));
     }
 
     public EnrollmentResult verify(EnrollmentId enrollmentId, String code) {

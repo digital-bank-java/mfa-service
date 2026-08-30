@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -32,12 +33,7 @@ class MfaApiExceptionHandler {
                         "message", String.valueOf(error.getDefaultMessage())))
                 .toList();
 
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
-        problem.setTitle("Invalid request");
-        problem.setType(java.net.URI.create("https://digital-bank-java.local/problems/validation-error"));
-        problem.setInstance(java.net.URI.create(request.getRequestURI()));
-        problem.setProperty("errors", errors);
-        return ResponseEntity.badRequest().body(problem);
+        return badRequestProblem(request, errors);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -49,22 +45,30 @@ class MfaApiExceptionHandler {
                         "message", violation.getMessage()))
                 .toList();
 
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
-        problem.setTitle("Invalid request");
-        problem.setType(java.net.URI.create("https://digital-bank-java.local/problems/validation-error"));
-        problem.setInstance(java.net.URI.create(request.getRequestURI()));
-        problem.setProperty("errors", errors);
-        return ResponseEntity.badRequest().body(problem);
+        return badRequestProblem(request, errors);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ProblemDetail> handleMalformedRequest(
+            HttpMessageNotReadableException exception, HttpServletRequest request) {
+        return badRequestProblem(
+                request, java.util.List.of(Map.of("field", "request", "message", "Malformed JSON request")));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ProblemDetail> handleIllegalArgument(
             IllegalArgumentException exception, HttpServletRequest request) {
+        return badRequestProblem(
+                request, java.util.List.of(Map.of("field", "request", "message", exception.getMessage())));
+    }
+
+    private static ResponseEntity<ProblemDetail> badRequestProblem(
+            HttpServletRequest request, java.util.List<Map<String, String>> errors) {
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
         problem.setTitle("Invalid request");
         problem.setType(java.net.URI.create("https://digital-bank-java.local/problems/validation-error"));
         problem.setInstance(java.net.URI.create(request.getRequestURI()));
-        problem.setProperty("errors", java.util.List.of(Map.of("field", "request", "message", exception.getMessage())));
+        problem.setProperty("errors", errors);
         return ResponseEntity.badRequest().body(problem);
     }
 }

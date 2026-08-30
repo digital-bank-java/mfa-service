@@ -1,30 +1,31 @@
 package com.digitalbank.mfaservice;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.http.MediaType.APPLICATION_JSON;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.digitalbank.mfaservice.mfa.application.port.TotpProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
-import org.springframework.test.web.servlet.MockMvc;
 
-@AutoConfigureMockMvc
-@SpringBootTest(classes = {MfaServiceApplication.class, MfaApiIT.TestConfig.class})
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        classes = {MfaServiceApplication.class, MfaApiIT.TestConfig.class})
 class MfaApiIT {
 
-    @Autowired
-    private MockMvc mockMvc;
-
+    private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
+    @LocalServerPort
+    private int port;
 
     @Test
     void enrollsActivatesCreatesChallengeAndVerifies() throws Exception {
@@ -41,6 +42,10 @@ class MfaApiIT {
         var enrollment = objectMapper.readTree(enrollmentResponse.body());
         assertThat(enrollment.path("status").asText()).isEqualTo("ENROLLED");
         assertThat(enrollment.path("enrollmentStatus").asText()).isEqualTo("PENDING");
+        assertThat(enrollment.path("provisioningUri").asText())
+                .startsWith("otpauth://totp/")
+                .contains("secret=TEST-SECRET")
+                .contains("subject-1");
         var enrollmentId = enrollment.path("enrollmentId").asText();
 
         var activationResponse = sendJson("POST", "/api/v1/mfa/enrollments/" + enrollmentId + "/verifications", """
@@ -55,6 +60,7 @@ class MfaApiIT {
         assertThat(activated.path("status").asText()).isEqualTo("ACTIVATED");
         assertThat(activated.path("enrollmentId").asText()).isEqualTo(enrollmentId);
         assertThat(activated.path("enrollmentStatus").asText()).isEqualTo("ACTIVE");
+        assertThat(activated.has("provisioningUri")).isFalse();
 
         var challengeResponse = sendJson("POST", "/api/v1/mfa/challenges", """
                 {
@@ -132,6 +138,22 @@ class MfaApiIT {
     }
 
     @Test
+    void rejectsMalformedEnrollmentRequest() throws Exception {
+        var response = sendJson("POST", "/api/v1/mfa/enrollments", """
+                {
+                  "subjectId":
+                }
+                """);
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertContentType(response, "application/problem+json");
+        var problem = objectMapper.readTree(response.body());
+        assertThat(problem.path("type").asText())
+                .isEqualTo("https://digital-bank-java.local/problems/validation-error");
+        assertThat(problem.path("title").asText()).isEqualTo("Invalid request");
+    }
+
+    @Test
     void publishesOpenApiContractForMfaRoutes() throws Exception {
         var response = send("GET", "/v3/api-docs");
 
@@ -153,8 +175,42 @@ class MfaApiIT {
                 .path("responses");
         assertThat(enrollResponses.path("201").path("content").has("application/json"))
                 .isTrue();
+        assertThat(openApi.path("components")
+                        .path("schemas")
+                        .path("EnrollmentResponse")
+                        .path("properties")
+                        .has("provisioningUri"))
+                .isTrue();
         assertThat(enrollResponses.path("400").path("content").has("application/problem+json"))
                 .isTrue();
+
+        var verifyEnrollmentResponses = openApi.path("paths")
+                .path("/api/v1/mfa/enrollments/{enrollmentId}/verifications")
+                .path("post")
+                .path("responses");
+        assertThat(verifyEnrollmentResponses.path("401").path("content").has("application/problem+json"))
+                .isTrue();
+        assertThat(verifyEnrollmentResponses.path("409").path("content").has("application/problem+json"))
+                .isTrue();
+        assertThat(verifyEnrollmentResponses
+                        .path("401")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("invalid-code")
+                        .path("value")
+                        .has("remainingAttempts"))
+                .isFalse();
+        assertThat(verifyEnrollmentResponses
+                        .path("409")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("enrollment-already-active")
+                        .path("value")
+                        .path("type")
+                        .asText())
+                .isEqualTo("urn:digital-bank:mfa:enrollment-already-active");
 
         var verifyChallengeResponses = openApi.path("paths")
                 .path("/api/v1/mfa/challenges/{challengeId}/verifications")
@@ -166,6 +222,16 @@ class MfaApiIT {
                 .isTrue();
         assertThat(verifyChallengeResponses.path("404").path("content").has("application/problem+json"))
                 .isTrue();
+        assertThat(verifyChallengeResponses
+                        .path("401")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("invalid-code")
+                        .path("value")
+                        .path("remainingAttempts")
+                        .asInt())
+                .isEqualTo(4);
     }
 
     private String activateEnrollment() throws Exception {
@@ -188,37 +254,25 @@ class MfaApiIT {
     }
 
     private static void assertContentType(HttpResponse<String> response, String expectedContentType) {
-        assertThat(response.contentType()).startsWith(expectedContentType);
+        assertThat(response.headers().firstValue("content-type"))
+                .hasValueSatisfying(contentType -> assertThat(contentType).startsWith(expectedContentType));
     }
 
     private HttpResponse<String> send(String method, String path) throws Exception {
-        var response =
-                switch (method) {
-                    case "GET" -> mockMvc.perform(get(path)).andReturn().getResponse();
-                    case "POST" -> mockMvc.perform(post(path)).andReturn().getResponse();
-                    default -> throw new IllegalArgumentException("Unsupported method: " + method);
-                };
-        return new HttpResponse<>(
-                response.getStatus(),
-                response.getContentAsString(),
-                response.getHeader("Location"),
-                response.getContentType());
+        var request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + path))
+                .method(method, HttpRequest.BodyPublishers.noBody())
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> sendJson(String method, String path, String body) throws Exception {
-        var response =
-                switch (method) {
-                    case "POST" ->
-                        mockMvc.perform(post(path).contentType(APPLICATION_JSON).content(body))
-                                .andReturn()
-                                .getResponse();
-                    default -> throw new IllegalArgumentException("Unsupported method: " + method);
-                };
-        return new HttpResponse<>(
-                response.getStatus(),
-                response.getContentAsString(),
-                response.getHeader("Location"),
-                response.getContentType());
+        var request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + path))
+                .header("Content-Type", "application/json")
+                .method(method, HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     @TestConfiguration
@@ -237,24 +291,12 @@ class MfaApiIT {
                 public boolean verify(String secret, String code, Instant at) {
                     return "TEST-SECRET".equals(secret) && "123456".equals(code);
                 }
-            };
-        }
-    }
 
-    private record HttpResponse<T>(int statusCode, T body, String location, String contentType) {
-
-        HeaderMap headers() {
-            return new HeaderMap(location, contentType);
-        }
-    }
-
-    private record HeaderMap(String location, String contentType) {
-
-        java.util.Optional<String> firstValue(String name) {
-            return switch (name.toLowerCase(java.util.Locale.ROOT)) {
-                case "location" -> java.util.Optional.ofNullable(location);
-                case "content-type" -> java.util.Optional.ofNullable(contentType);
-                default -> java.util.Optional.empty();
+                @Override
+                public String provisioningUri(String secret, String subjectId) {
+                    return "otpauth://totp/Digital%%20Bank:%s?secret=%s&issuer=Digital%%20Bank"
+                            .formatted(subjectId, secret);
+                }
             };
         }
     }
