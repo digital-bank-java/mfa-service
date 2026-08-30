@@ -59,7 +59,8 @@ class MfaApiExceptionHandler {
     ResponseEntity<ProblemDetail> handleIllegalArgument(
             IllegalArgumentException exception, HttpServletRequest request) {
         return badRequestProblem(
-                request, java.util.List.of(Map.of("field", "request", "message", exception.getMessage())));
+                request,
+                java.util.List.of(Map.of("field", "request", "message", "One or more request values were invalid.")));
     }
 
     private static ResponseEntity<ProblemDetail> badRequestProblem(

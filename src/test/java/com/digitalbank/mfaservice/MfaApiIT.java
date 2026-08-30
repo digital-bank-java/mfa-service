@@ -122,31 +122,84 @@ class MfaApiIT {
 
     @Test
     void rejectsUnauthenticatedRequestsForAllMfaEndpoints() throws Exception {
-        assertThat(sendJson("POST", "/api/v1/mfa/enrollments", """
+        assertAuthenticationProblem(sendJson("POST", "/api/v1/mfa/enrollments", """
                         {
                           "subjectId": "subject-1"
                         }
-                        """).statusCode())
-                .isEqualTo(401);
-        assertThat(sendJson("POST", "/api/v1/mfa/enrollments/enrollment-1/verifications", """
+                        """), "/api/v1/mfa/enrollments");
+        assertAuthenticationProblem(
+                sendJson("POST", "/api/v1/mfa/enrollments/enrollment-1/verifications", """
                         {
                           "code": "123456"
                         }
-                        """)
-                        .statusCode())
-                .isEqualTo(401);
-        assertThat(sendJson("POST", "/api/v1/mfa/challenges", """
+                        """),
+                "/api/v1/mfa/enrollments/enrollment-1/verifications");
+        assertAuthenticationProblem(sendJson("POST", "/api/v1/mfa/challenges", """
                         {
                           "enrollmentId": "enrollment-1"
                         }
-                        """).statusCode()).isEqualTo(401);
-        assertThat(sendJson("POST", "/api/v1/mfa/challenges/challenge-1/verifications", """
+                        """), "/api/v1/mfa/challenges");
+        assertAuthenticationProblem(
+                sendJson("POST", "/api/v1/mfa/challenges/challenge-1/verifications", """
                         {
                           "code": "123456"
                         }
-                        """)
-                        .statusCode())
-                .isEqualTo(401);
+                        """),
+                "/api/v1/mfa/challenges/challenge-1/verifications");
+    }
+
+    @Test
+    void rejectsMalformedBearerTokenAsProblemDetails() throws Exception {
+        var response =
+                sendJson("POST", "/api/v1/mfa/enrollments", """
+                {
+                  "subjectId": "subject-1"
+                }
+                """, "Bearer " + TestSecurityConfig.MALFORMED_BEARER_TOKEN);
+
+        assertAuthenticationProblem(response, "/api/v1/mfa/enrollments");
+    }
+
+    @Test
+    void rejectsExpiredBearerTokenAsProblemDetails() throws Exception {
+        var response =
+                sendJson("POST", "/api/v1/mfa/enrollments", """
+                {
+                  "subjectId": "subject-1"
+                }
+                """, "Bearer " + TestSecurityConfig.EXPIRED_BEARER_TOKEN);
+
+        assertAuthenticationProblem(response, "/api/v1/mfa/enrollments");
+    }
+
+    @Test
+    void rejectsWrongIssuerBearerTokenAsProblemDetails() throws Exception {
+        var response = sendJson(
+                "POST", "/api/v1/mfa/enrollments", """
+                {
+                  "subjectId": "subject-1"
+                }
+                """, "Bearer " + TestSecurityConfig.WRONG_ISSUER_BEARER_TOKEN);
+
+        assertAuthenticationProblem(response, "/api/v1/mfa/enrollments");
+    }
+
+    @Test
+    void rejectsInsufficientScopeAsProblemDetails() throws Exception {
+        var response = sendJson(
+                "POST", "/api/v1/mfa/enrollments", """
+                {
+                  "subjectId": "subject-1"
+                }
+                """, "Bearer " + TestSecurityConfig.INSUFFICIENT_SCOPE_BEARER_TOKEN);
+
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertContentType(response, "application/problem+json");
+        var problem = objectMapper.readTree(response.body());
+        assertThat(problem.path("type").asText()).isEqualTo("urn:digital-bank:mfa:access-denied");
+        assertThat(problem.path("title").asText()).isEqualTo("MFA access denied");
+        assertThat(problem.path("instance").asText()).isEqualTo("/api/v1/mfa/enrollments");
+        assertThat(problem.path("detail").asText()).doesNotContain("scope");
     }
 
     @Test
@@ -203,6 +256,19 @@ class MfaApiIT {
                         .path("scheme")
                         .asText())
                 .isEqualTo("bearer");
+        assertThat(openApi.path("paths")
+                        .path("/api/v1/mfa/enrollments")
+                        .path("post")
+                        .path("responses")
+                        .path("401")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("authentication-required")
+                        .path("value")
+                        .path("type")
+                        .asText())
+                .isEqualTo("urn:digital-bank:mfa:authentication-required");
 
         var enrollResponses = openApi.path("paths")
                 .path("/api/v1/mfa/enrollments")
@@ -234,6 +300,16 @@ class MfaApiIT {
         assertThat(verifyEnrollmentResponses.path("409").path("content").has("application/problem+json"))
                 .isTrue();
         assertThat(verifyEnrollmentResponses
+                        .path("400")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("validation-error")
+                        .path("value")
+                        .path("instance")
+                        .asText())
+                .isEqualTo("/api/v1/mfa/enrollments/enrollment-1/verifications");
+        assertThat(verifyEnrollmentResponses
                         .path("401")
                         .path("content")
                         .path("application/problem+json")
@@ -242,6 +318,16 @@ class MfaApiIT {
                         .path("value")
                         .has("remainingAttempts"))
                 .isFalse();
+        assertThat(verifyEnrollmentResponses
+                        .path("401")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("authentication-required")
+                        .path("value")
+                        .path("instance")
+                        .asText())
+                .isEqualTo("/api/v1/mfa/enrollments/enrollment-1/verifications");
         assertThat(verifyEnrollmentResponses
                         .path("409")
                         .path("content")
@@ -263,6 +349,29 @@ class MfaApiIT {
                 .isTrue();
         assertThat(verifyChallengeResponses.path("404").path("content").has("application/problem+json"))
                 .isTrue();
+        assertThat(openApi.path("paths")
+                        .path("/api/v1/mfa/challenges")
+                        .path("post")
+                        .path("responses")
+                        .path("404")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("resource-not-found")
+                        .path("value")
+                        .path("instance")
+                        .asText())
+                .isEqualTo("/api/v1/mfa/challenges");
+        assertThat(verifyChallengeResponses
+                        .path("404")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("resource-not-found")
+                        .path("value")
+                        .path("instance")
+                        .asText())
+                .isEqualTo("/api/v1/mfa/challenges/challenge-404/verifications");
         assertThat(verifyChallengeResponses
                         .path("401")
                         .path("content")
@@ -273,6 +382,19 @@ class MfaApiIT {
                         .path("remainingAttempts")
                         .asInt())
                 .isEqualTo(4);
+    }
+
+    private void assertAuthenticationProblem(HttpResponse<String> response, String expectedInstance) throws Exception {
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertContentType(response, "application/problem+json");
+        var problem = objectMapper.readTree(response.body());
+        assertThat(problem.path("type").asText()).isEqualTo("urn:digital-bank:mfa:authentication-required");
+        assertThat(problem.path("title").asText()).isEqualTo("MFA authentication required");
+        assertThat(problem.path("instance").asText()).isEqualTo(expectedInstance);
+        assertThat(problem.path("detail").asText())
+                .doesNotContain("issuer")
+                .doesNotContain("expired")
+                .doesNotContain("token");
     }
 
     private String activateEnrollment() throws Exception {

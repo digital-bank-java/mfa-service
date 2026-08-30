@@ -1,0 +1,63 @@
+package com.digitalbank.mfaservice.security;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.stereotype.Component;
+
+@Component
+class MfaSecurityProblemSupport implements AuthenticationEntryPoint, AccessDeniedHandler {
+
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception)
+            throws IOException {
+        writeProblem(
+                request,
+                response,
+                HttpStatus.UNAUTHORIZED,
+                URI.create("urn:digital-bank:mfa:authentication-required"),
+                "MFA authentication required",
+                "Authentication is required to access this MFA resource.");
+    }
+
+    @Override
+    public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException exception)
+            throws IOException {
+        writeProblem(
+                request,
+                response,
+                HttpStatus.FORBIDDEN,
+                URI.create("urn:digital-bank:mfa:access-denied"),
+                "MFA access denied",
+                "The authenticated principal is not allowed to access this MFA resource.");
+    }
+
+    private void writeProblem(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            HttpStatus status,
+            URI type,
+            String title,
+            String detail)
+            throws IOException {
+        response.setStatus(status.value());
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        var body = Map.of(
+                "type", type.toString(),
+                "title", title,
+                "status", status.value(),
+                "detail", detail,
+                "instance", request.getRequestURI());
+        new com.fasterxml.jackson.databind.ObjectMapper().writeValue(response.getOutputStream(), body);
+    }
+}

@@ -52,6 +52,8 @@ Internal endpoint authentication depends on standard Spring Security resource-se
 | `spring.security.oauth2.resourceserver.jwt.issuer-uri` | JWT issuer for internal service authentication | none |
 | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` | JWK set endpoint for internal service authentication | none |
 
+`spring.security.oauth2.resourceserver.jwt.issuer-uri` is the required trust anchor for MFA endpoint authentication. When `jwk-set-uri` is configured, the decoder still validates the token issuer against `issuer-uri`; JWK material alone is not treated as sufficient trust configuration.
+
 The formal environments are `sit`, `uat`, and `prod`. `sit` runs on local Docker Desktop Kubernetes; `uat` and `prod` are future AWS environments. `local` is not an active environment or Spring profile. Workstation debugging uses the `sit` profile with temporary overrides against forwarded SIT dependencies.
 
 ## HTTP API
@@ -99,7 +101,7 @@ curl --request POST http://localhost:8087/api/v1/mfa/challenges/<challenge-id>/v
   }'
 ```
 
-Error responses use `application/problem+json`. Validation failures return `400`, unknown resources return `404`, enrollment state conflicts return `409`, and invalid or expired challenge verification outcomes return `401`.
+Error responses use `application/problem+json`. Authentication failures return `401` with `urn:digital-bank:mfa:authentication-required`, authorization failures return `403` with `urn:digital-bank:mfa:access-denied`, validation failures return `400`, unknown resources return `404`, enrollment state conflicts return `409`, and invalid or expired challenge verification outcomes return `401`.
 
 `/v3/api-docs` remains available for internal machine-readable contract publication. Service-local Swagger UI is disabled; the platform-owned interactive documentation surface belongs at the API Gateway.
 

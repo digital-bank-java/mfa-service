@@ -22,6 +22,8 @@ The service uses `application/problem+json` and this shape for expected MFA fail
 
 | Application outcome | HTTP status | Problem type | Meaning |
 | --- | --- | --- | --- |
+| Authentication required | `401` | `urn:digital-bank:mfa:authentication-required` | No bearer token or the bearer token failed authentication or JWT validation. |
+| Access denied | `403` | `urn:digital-bank:mfa:access-denied` | The authenticated principal is missing the required internal MFA scope. |
 | Validation failure | `400` | `https://digital-bank-java.local/problems/validation-error` | The request body or parameters failed boundary validation. |
 | `NOT_FOUND` | `404` | `urn:digital-bank:mfa:resource-not-found` | The requested enrollment or challenge is unknown. |
 | `INVALID_CODE` | `401` | `urn:digital-bank:mfa:invalid-code` | The code was invalid and the challenge remains open. |
@@ -35,4 +37,4 @@ Enrollment and challenge success responses never return TOTP secrets or authenti
 
 ## Transport Ownership
 
-The HTTP adapter now requires bearer JWT authentication on `/api/v1/mfa/**` through Spring Security's resource-server support. Platform-owned issuer/JWK configuration is still an external dependency. Rate limits, gateway routes, authenticator provisioning UX, and auth-service orchestration remain later integration work. The application/domain foundation remains usable without Spring MVC or an HTTP request context.
+The HTTP adapter now requires bearer JWT authentication on `/api/v1/mfa/**` through Spring Security's resource-server support. `spring.security.oauth2.resourceserver.jwt.issuer-uri` is required for the platform-owned trust configuration, and `jwk-set-uri` remains optional supplemental key material. The application validates the JWT issuer even when `jwk-set-uri` is configured explicitly. Rate limits, gateway routes, authenticator provisioning UX, and auth-service orchestration remain later integration work. The application/domain foundation remains usable without Spring MVC or an HTTP request context.

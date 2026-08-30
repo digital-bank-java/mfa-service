@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "bearer-jwt")
 class MfaController {
 
-    private static final String VALIDATION_PROBLEM_EXAMPLE = """
+    private static final String CREATE_ENROLLMENT_VALIDATION_PROBLEM_EXAMPLE = """
             {
               "type": "https://digital-bank-java.local/problems/validation-error",
               "title": "Invalid request",
@@ -44,6 +44,134 @@ class MfaController {
                   "message": "must not be blank"
                 }
               ]
+            }
+            """;
+
+    private static final String VERIFY_ENROLLMENT_VALIDATION_PROBLEM_EXAMPLE = """
+            {
+              "type": "https://digital-bank-java.local/problems/validation-error",
+              "title": "Invalid request",
+              "status": 400,
+              "detail": "Request validation failed",
+              "instance": "/api/v1/mfa/enrollments/enrollment-1/verifications",
+              "errors": [
+                {
+                  "field": "code",
+                  "message": "must match \\\\d{6}"
+                }
+              ]
+            }
+            """;
+
+    private static final String CREATE_CHALLENGE_VALIDATION_PROBLEM_EXAMPLE = """
+            {
+              "type": "https://digital-bank-java.local/problems/validation-error",
+              "title": "Invalid request",
+              "status": 400,
+              "detail": "Request validation failed",
+              "instance": "/api/v1/mfa/challenges",
+              "errors": [
+                {
+                  "field": "enrollmentId",
+                  "message": "must not be blank"
+                }
+              ]
+            }
+            """;
+
+    private static final String VERIFY_CHALLENGE_VALIDATION_PROBLEM_EXAMPLE = """
+            {
+              "type": "https://digital-bank-java.local/problems/validation-error",
+              "title": "Invalid request",
+              "status": 400,
+              "detail": "Request validation failed",
+              "instance": "/api/v1/mfa/challenges/challenge-1/verifications",
+              "errors": [
+                {
+                  "field": "code",
+                  "message": "must match \\\\d{6}"
+                }
+              ]
+            }
+            """;
+
+    private static final String CREATE_ENROLLMENT_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:authentication-required",
+              "title": "MFA authentication required",
+              "status": 401,
+              "detail": "Authentication is required to access this MFA resource.",
+              "instance": "/api/v1/mfa/enrollments"
+            }
+            """;
+
+    private static final String VERIFY_ENROLLMENT_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:authentication-required",
+              "title": "MFA authentication required",
+              "status": 401,
+              "detail": "Authentication is required to access this MFA resource.",
+              "instance": "/api/v1/mfa/enrollments/enrollment-1/verifications"
+            }
+            """;
+
+    private static final String CREATE_CHALLENGE_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:authentication-required",
+              "title": "MFA authentication required",
+              "status": 401,
+              "detail": "Authentication is required to access this MFA resource.",
+              "instance": "/api/v1/mfa/challenges"
+            }
+            """;
+
+    private static final String VERIFY_CHALLENGE_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:authentication-required",
+              "title": "MFA authentication required",
+              "status": 401,
+              "detail": "Authentication is required to access this MFA resource.",
+              "instance": "/api/v1/mfa/challenges/challenge-1/verifications"
+            }
+            """;
+
+    private static final String CREATE_ENROLLMENT_ACCESS_DENIED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:access-denied",
+              "title": "MFA access denied",
+              "status": 403,
+              "detail": "The authenticated principal is not allowed to access this MFA resource.",
+              "instance": "/api/v1/mfa/enrollments"
+            }
+            """;
+
+    private static final String VERIFY_ENROLLMENT_ACCESS_DENIED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:access-denied",
+              "title": "MFA access denied",
+              "status": 403,
+              "detail": "The authenticated principal is not allowed to access this MFA resource.",
+              "instance": "/api/v1/mfa/enrollments/enrollment-1/verifications"
+            }
+            """;
+
+    private static final String CREATE_CHALLENGE_ACCESS_DENIED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:access-denied",
+              "title": "MFA access denied",
+              "status": 403,
+              "detail": "The authenticated principal is not allowed to access this MFA resource.",
+              "instance": "/api/v1/mfa/challenges"
+            }
+            """;
+
+    private static final String VERIFY_CHALLENGE_ACCESS_DENIED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:access-denied",
+              "title": "MFA access denied",
+              "status": 403,
+              "detail": "The authenticated principal is not allowed to access this MFA resource.",
+              "instance": "/api/v1/mfa/challenges/challenge-1/verifications"
             }
             """;
 
@@ -68,13 +196,33 @@ class MfaController {
             }
             """;
 
-    private static final String RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE = """
+    private static final String VERIFY_ENROLLMENT_RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE = """
             {
               "type": "urn:digital-bank:mfa:resource-not-found",
               "title": "MFA resource not found",
               "status": 404,
               "detail": "The requested MFA enrollment does not exist.",
               "instance": "/api/v1/mfa/enrollments/enrollment-404/verifications"
+            }
+            """;
+
+    private static final String CREATE_CHALLENGE_RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:resource-not-found",
+              "title": "MFA resource not found",
+              "status": 404,
+              "detail": "The requested MFA enrollment does not exist.",
+              "instance": "/api/v1/mfa/challenges"
+            }
+            """;
+
+    private static final String VERIFY_CHALLENGE_RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:resource-not-found",
+              "title": "MFA resource not found",
+              "status": 404,
+              "detail": "The requested MFA challenge does not exist.",
+              "instance": "/api/v1/mfa/challenges/challenge-404/verifications"
             }
             """;
 
@@ -116,13 +264,38 @@ class MfaController {
                             mediaType = MediaType.APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = EnrollmentResponse.class)))
     @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class),
+                            examples =
+                                    @ExampleObject(
+                                            name = "authentication-required",
+                                            value = CREATE_ENROLLMENT_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE)))
+    @ApiResponse(
+            responseCode = "403",
+            description = "Access denied",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class),
+                            examples =
+                                    @ExampleObject(
+                                            name = "access-denied",
+                                            value = CREATE_ENROLLMENT_ACCESS_DENIED_PROBLEM_EXAMPLE)))
+    @ApiResponse(
             responseCode = "400",
             description = "Invalid request",
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class),
-                            examples = @ExampleObject(name = "validation-error", value = VALIDATION_PROBLEM_EXAMPLE)))
+                            examples =
+                                    @ExampleObject(
+                                            name = "validation-error",
+                                            value = CREATE_ENROLLMENT_VALIDATION_PROBLEM_EXAMPLE)))
     ResponseEntity<EnrollmentResponse> createEnrollment(@Valid @RequestBody CreateEnrollmentRequest request) {
         var result = enrollmentService.enroll(request.subjectId());
         var response = EnrollmentResponse.from(result);
@@ -147,18 +320,34 @@ class MfaController {
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class),
-                            examples = @ExampleObject(name = "validation-error", value = VALIDATION_PROBLEM_EXAMPLE)))
+                            examples =
+                                    @ExampleObject(
+                                            name = "validation-error",
+                                            value = VERIFY_ENROLLMENT_VALIDATION_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "401",
-            description = "Invalid MFA code",
+            description = "Authentication required or invalid MFA code",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class),
+                            examples = {
+                                @ExampleObject(
+                                        name = "authentication-required",
+                                        value = VERIFY_ENROLLMENT_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE),
+                                @ExampleObject(name = "invalid-code", value = ENROLLMENT_INVALID_CODE_PROBLEM_EXAMPLE)
+                            }))
+    @ApiResponse(
+            responseCode = "403",
+            description = "Access denied",
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class),
                             examples =
                                     @ExampleObject(
-                                            name = "invalid-code",
-                                            value = ENROLLMENT_INVALID_CODE_PROBLEM_EXAMPLE)))
+                                            name = "access-denied",
+                                            value = VERIFY_ENROLLMENT_ACCESS_DENIED_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "404",
             description = "Enrollment not found",
@@ -169,7 +358,7 @@ class MfaController {
                             examples =
                                     @ExampleObject(
                                             name = "resource-not-found",
-                                            value = RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE)))
+                                            value = VERIFY_ENROLLMENT_RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "409",
             description = "Enrollment already active",
@@ -203,7 +392,32 @@ class MfaController {
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class),
-                            examples = @ExampleObject(name = "validation-error", value = VALIDATION_PROBLEM_EXAMPLE)))
+                            examples =
+                                    @ExampleObject(
+                                            name = "validation-error",
+                                            value = CREATE_CHALLENGE_VALIDATION_PROBLEM_EXAMPLE)))
+    @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class),
+                            examples =
+                                    @ExampleObject(
+                                            name = "authentication-required",
+                                            value = CREATE_CHALLENGE_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE)))
+    @ApiResponse(
+            responseCode = "403",
+            description = "Access denied",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class),
+                            examples =
+                                    @ExampleObject(
+                                            name = "access-denied",
+                                            value = CREATE_CHALLENGE_ACCESS_DENIED_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "404",
             description = "Enrollment not found",
@@ -214,7 +428,7 @@ class MfaController {
                             examples =
                                     @ExampleObject(
                                             name = "resource-not-found",
-                                            value = RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE)))
+                                            value = CREATE_CHALLENGE_RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "409",
             description = "Enrollment not active",
@@ -250,18 +464,34 @@ class MfaController {
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class),
-                            examples = @ExampleObject(name = "validation-error", value = VALIDATION_PROBLEM_EXAMPLE)))
+                            examples =
+                                    @ExampleObject(
+                                            name = "validation-error",
+                                            value = VERIFY_CHALLENGE_VALIDATION_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "401",
-            description = "Verification failed",
+            description = "Authentication required or verification failed",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class),
+                            examples = {
+                                @ExampleObject(
+                                        name = "authentication-required",
+                                        value = VERIFY_CHALLENGE_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE),
+                                @ExampleObject(name = "invalid-code", value = CHALLENGE_INVALID_CODE_PROBLEM_EXAMPLE)
+                            }))
+    @ApiResponse(
+            responseCode = "403",
+            description = "Access denied",
             content =
                     @Content(
                             mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class),
                             examples =
                                     @ExampleObject(
-                                            name = "invalid-code",
-                                            value = CHALLENGE_INVALID_CODE_PROBLEM_EXAMPLE)))
+                                            name = "access-denied",
+                                            value = VERIFY_CHALLENGE_ACCESS_DENIED_PROBLEM_EXAMPLE)))
     @ApiResponse(
             responseCode = "404",
             description = "Challenge not found",
@@ -272,7 +502,7 @@ class MfaController {
                             examples =
                                     @ExampleObject(
                                             name = "resource-not-found",
-                                            value = RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE)))
+                                            value = VERIFY_CHALLENGE_RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE)))
     ResponseEntity<ChallengeResponse> verifyChallenge(
             @PathVariable String challengeId, @Valid @RequestBody VerifyTotpCodeRequest request) {
         var result = challengeService.verify(new ChallengeId(challengeId), request.code());

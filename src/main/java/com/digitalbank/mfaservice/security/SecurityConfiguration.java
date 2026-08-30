@@ -13,7 +13,8 @@ import org.springframework.security.web.SecurityFilterChain;
 class SecurityConfiguration {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, MfaSecurityProblemSupport problemSupport)
+            throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
@@ -26,10 +27,14 @@ class SecurityConfiguration {
                                 "/swagger-ui.html")
                         .permitAll()
                         .requestMatchers("/api/v1/mfa/**")
-                        .authenticated()
+                        .hasAuthority("SCOPE_mfa.internal")
                         .anyRequest()
                         .denyAll())
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(withDefaults()));
+                .exceptionHandling(exceptions ->
+                        exceptions.authenticationEntryPoint(problemSupport).accessDeniedHandler(problemSupport))
+                .oauth2ResourceServer(oauth2 -> oauth2.authenticationEntryPoint(problemSupport)
+                        .accessDeniedHandler(problemSupport)
+                        .jwt(withDefaults()));
         return http.build();
     }
 }
