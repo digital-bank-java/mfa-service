@@ -94,7 +94,7 @@ jobs:
 
           response = {
               "name": "mfa-service",
-              "profiles": ["default"],
+              "profiles": ["sit"],
               "label": None,
               "version": "ci",
               "state": None,
@@ -142,12 +142,17 @@ jobs:
             --publish 8087:8087 \
             --add-host host.docker.internal:host-gateway \
             --env CONFIG_SERVER_URL=http://host.docker.internal:8888 \
+            --env SPRING_PROFILES_ACTIVE=sit \
             digital-bank-java/mfa-service:ci
 
           ready=false
           for attempt in {1..30}; do
             if curl --fail --silent \
-              http://localhost:8087/actuator/health > /dev/null; then
+              http://localhost:8087/actuator/health > /dev/null \
+              && curl --fail --silent \
+                http://localhost:8087/actuator/health/liveness > /dev/null \
+              && curl --fail --silent \
+                http://localhost:8087/actuator/health/readiness > /dev/null; then
               ready=true
               break
             fi

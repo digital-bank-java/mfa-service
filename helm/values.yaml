@@ -29,14 +29,17 @@ probes:
     path: /actuator/health/liveness
     failureThreshold: 30
     periodSeconds: 5
+    timeoutSeconds: 2
   liveness:
     path: /actuator/health/liveness
     initialDelaySeconds: 30
     periodSeconds: 10
+    timeoutSeconds: 2
   readiness:
     path: /actuator/health/readiness
     initialDelaySeconds: 10
     periodSeconds: 5
+    timeoutSeconds: 2
 
 podSecurityContext:
   runAsNonRoot: true

@@ -29,6 +29,8 @@ Config Server supplies the effective runtime configuration. The service reposito
 
 The formal environments are `sit`, `uat`, and `prod`. `sit` runs on local Docker Desktop Kubernetes; `uat` and `prod` are future AWS environments. `local` is not an active environment or Spring profile. Workstation debugging uses the `sit` profile with temporary overrides against forwarded SIT dependencies.
 
+Before deploying to SIT, the Config Server's backing `config-repo` should contain the `mfa-service` defaults and SIT override from config-repo PR [#32](https://github.com/digital-bank-java/config-repo/pull/32). Without those service-specific files, Config Server can still return shared configuration and the service can start with its local port default, but the intended `mfa-service` metadata is absent. The mandatory Config Client import still fails startup when Config Server itself is unavailable.
+
 ## Prerequisites
 
 - Java 21.
@@ -61,7 +63,7 @@ Run integration tests and package verification:
 ./mvnw --batch-mode --no-transfer-progress verify -DskipUnitTests=true
 ```
 
-The integration test disables Config Client and validates health plus the OpenAPI title and contract version using a random application port.
+The integration test disables Config Client and validates health, liveness, readiness, plus the OpenAPI title and contract version using a random application port.
 
 ## Run With Docker
 

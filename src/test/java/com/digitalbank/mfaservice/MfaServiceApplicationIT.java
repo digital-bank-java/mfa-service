@@ -27,6 +27,22 @@ class MfaServiceApplicationIT {
     }
 
     @Test
+    void livenessProbeReportsUp() throws Exception {
+        var response = get("/actuator/health/liveness");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"status\":\"UP\"");
+    }
+
+    @Test
+    void readinessProbeReportsUp() throws Exception {
+        var response = get("/actuator/health/readiness");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"status\":\"UP\"");
+    }
+
+    @Test
     void openApiDocumentPublishesServiceMetadata() throws Exception {
         var response = get("/v3/api-docs");
 

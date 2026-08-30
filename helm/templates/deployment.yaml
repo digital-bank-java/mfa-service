@@ -35,6 +35,8 @@ spec:
               value: {{ .Values.runtime.configServerUrl | quote }}
             - name: SPRING_PROFILES_ACTIVE
               value: {{ .Values.runtime.profile | quote }}
+            - name: SERVER_PORT
+              value: {{ .Values.service.port | quote }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
@@ -47,18 +49,21 @@ spec:
               port: http
             failureThreshold: {{ .Values.probes.startup.failureThreshold }}
             periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.liveness.path }}
               port: http
             initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
           readinessProbe:
             httpGet:
               path: {{ .Values.probes.readiness.path }}
               port: http
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
