@@ -39,11 +39,13 @@ public final class TotpEnrollmentService {
             return new EnrollmentResult(EnrollmentOutcome.NOT_FOUND, enrollmentId, null);
         }
         var record = enrollment.orElseThrow();
-        if (record.status().equals(com.digitalbank.mfaservice.mfa.domain.EnrollmentStatus.ACTIVE)) {
-            return new EnrollmentResult(EnrollmentOutcome.ALREADY_ACTIVE, record.id(), record.status());
-        }
-        var activated = record.verifyAndActivate(totpProvider, code, clock.instant());
-        return new EnrollmentResult(
-                activated ? EnrollmentOutcome.ACTIVATED : EnrollmentOutcome.INVALID_CODE, record.id(), record.status());
+        var verificationOutcome = record.verifyAndActivate(totpProvider, code, clock.instant());
+        var applicationOutcome =
+                switch (verificationOutcome) {
+                    case ACTIVATED -> EnrollmentOutcome.ACTIVATED;
+                    case INVALID_CODE -> EnrollmentOutcome.INVALID_CODE;
+                    case ALREADY_ACTIVE -> EnrollmentOutcome.ALREADY_ACTIVE;
+                };
+        return new EnrollmentResult(applicationOutcome, record.id(), record.status());
     }
 }

@@ -24,6 +24,8 @@ TOTP enrollment and challenge responses return only opaque ids, lifecycle status
 
 Challenge verification is fail-closed at `now >= expiresAt`. Wrong codes consume one attempt, the final failed attempt moves the challenge to `EXHAUSTED`, a valid code moves it to `CONSUMED`, and later verification of a consumed challenge returns a replay outcome without calling the TOTP provider again. The default challenge TTL is `PT5M` and the default maximum is `5` attempts; both are configurable through `mfa.challenge.ttl` and `mfa.challenge.max-attempts` and remain subject to the 1 through 10 attempt bound.
 
+Enrollment verification is an atomic one-time transition: a valid code changes `PENDING` to `ACTIVE`, an invalid code leaves the enrollment pending, and repeated or competing verification after activation returns an already-active outcome without invoking the TOTP provider again.
+
 The application services accept `java.time.Clock` and identifier-generator ports so unit tests can use fixed time and deterministic ids. See [Problem Details guidance](docs/problem-details.md) for the HTTP failure contract. This repository does not currently maintain a service-local Insomnia collection.
 
 MFA provider integrations must remain behind outbound ports and adapters when that work is approved and tracked. Never commit enrollment secrets, recovery codes, tokens, or production credentials to this repository.

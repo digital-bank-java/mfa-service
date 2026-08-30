@@ -42,17 +42,18 @@ public final class Enrollment {
         return status;
     }
 
-    public synchronized boolean verifyAndActivate(TotpCodeVerifier verifier, String code, Instant at) {
+    public synchronized EnrollmentVerificationOutcome verifyAndActivate(
+            TotpCodeVerifier verifier, String code, Instant at) {
         Objects.requireNonNull(verifier, "verifier");
         Objects.requireNonNull(at, "at");
         if (status != EnrollmentStatus.PENDING) {
-            return false;
+            return EnrollmentVerificationOutcome.ALREADY_ACTIVE;
         }
         if (!credential.verify(verifier, code, at)) {
-            return false;
+            return EnrollmentVerificationOutcome.INVALID_CODE;
         }
         status = EnrollmentStatus.ACTIVE;
-        return true;
+        return EnrollmentVerificationOutcome.ACTIVATED;
     }
 
     public synchronized boolean verifyActive(TotpCodeVerifier verifier, String code, Instant at) {
