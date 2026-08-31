@@ -18,7 +18,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 
 ## Boundaries
 
-This service will later own MFA policy and provider integration boundaries. The current implementation does not own customer identity data, login orchestration, recovery codes, Kafka behavior, durable persistence, authorization decisions, or API Gateway routing.
+This service will later own MFA policy and provider integration boundaries. The current implementation does not own customer identity data, login orchestration, recovery codes, Kafka behavior, durable persistence, or API Gateway routing. It does enforce the MFA endpoint scope and resource ownership authorization described below.
 
 TOTP enrollment and challenge responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. The generated secret is held only inside the credential store and is never returned in HTTP responses, application results, or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
 
