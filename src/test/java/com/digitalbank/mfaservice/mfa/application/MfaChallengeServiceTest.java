@@ -1,6 +1,7 @@
 package com.digitalbank.mfaservice.mfa.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.digitalbank.mfaservice.mfa.adapter.memory.InMemoryChallengeStore;
 import com.digitalbank.mfaservice.mfa.adapter.memory.InMemoryEnrollmentStore;
@@ -64,6 +65,14 @@ class MfaChallengeServiceTest {
         assertThat(result.challengeStatus()).isEqualTo(ChallengeStatus.OPEN);
         assertThat(result.expiresAt()).isEqualTo(EXPIRES_AT);
         assertThat(result.remainingAttempts()).isEqualTo(3);
+    }
+
+    @Test
+    void rejectsChallengeTtlBeyondTheSecurityBound() {
+        assertThatThrownBy(() -> new MfaChallengeService(
+                        enrollmentStore, challengeStore, provider, identifiers, clock, Duration.ofMinutes(16), 3))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Challenge TTL must not exceed 15 minutes");
     }
 
     @Test

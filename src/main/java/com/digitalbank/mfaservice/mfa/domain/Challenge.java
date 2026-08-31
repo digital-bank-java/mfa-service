@@ -1,11 +1,14 @@
 package com.digitalbank.mfaservice.mfa.domain;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 public final class Challenge {
+
+    public static final Duration MAX_TTL = Duration.ofMinutes(15);
 
     private final ChallengeId id;
     private final EnrollmentId enrollmentId;

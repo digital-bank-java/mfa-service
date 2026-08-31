@@ -22,7 +22,7 @@ This service will later own MFA policy and provider integration boundaries. The 
 
 TOTP enrollment and challenge responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. The generated secret is held only inside the credential store and is never returned in HTTP responses, application results, or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
 
-Challenge verification is fail-closed at `now >= expiresAt`. Wrong codes consume one attempt, the final failed attempt moves the challenge to `EXHAUSTED`, a valid code moves it to `CONSUMED`, and later verification of a consumed challenge returns a replay outcome without calling the TOTP provider again. The default challenge TTL is `PT5M` and the default maximum is `5` attempts; both are configurable through `mfa.challenge.ttl` and `mfa.challenge.max-attempts` and remain subject to the 1 through 10 attempt bound.
+Challenge verification is fail-closed at `now >= expiresAt`. Wrong codes consume one attempt, the final failed attempt moves the challenge to `EXHAUSTED`, a valid code moves it to `CONSUMED`, and later verification of a consumed challenge returns a replay outcome without calling the TOTP provider again. The default challenge TTL is `PT5M`, the maximum challenge TTL is `PT15M`, and the default maximum is `5` attempts; both settings are configurable through `mfa.challenge.ttl` and `mfa.challenge.max-attempts` and remain subject to their security bounds.
 
 Enrollment verification is an atomic one-time transition: a valid code changes `PENDING` to `ACTIVE`, an invalid code leaves the enrollment pending, and repeated or competing verification after activation returns an already-active outcome without invoking the TOTP provider again.
 
@@ -44,8 +44,8 @@ MFA foundation defaults:
 
 | Property | Purpose | Default |
 | --- | --- | --- |
-| `mfa.challenge.ttl` | Challenge lifetime | `PT5M` |
-| `mfa.challenge.max-attempts` | Maximum failed verification attempts | `5` |
+| `mfa.challenge.ttl` | Challenge lifetime; maximum `PT15M` | `PT5M` |
+| `mfa.challenge.max-attempts` | Maximum failed verification attempts; range `1` through `10` | `5` |
 
 Internal endpoint authentication depends on standard Spring Security resource-server JWT configuration supplied by Config Server or explicit runtime overrides:
 

@@ -121,6 +121,71 @@ class MfaApiIT {
     }
 
     @Test
+    void returnsProblemForReplayedChallenge() throws Exception {
+        var enrollmentId = activateEnrollment();
+        var challengeResponse = sendAuthorizedJson("POST", "/api/v1/mfa/challenges", """
+                {
+                  "enrollmentId": "%s"
+                }
+                """.formatted(enrollmentId));
+        var challengeId = objectMapper
+                .readTree(challengeResponse.body())
+                .path("challengeId")
+                .asText();
+        var path = "/api/v1/mfa/challenges/" + challengeId + "/verifications";
+
+        assertThat(sendAuthorizedJson("POST", path, """
+                        {
+                          "code": "123456"
+                        }
+                        """).statusCode()).isEqualTo(200);
+
+        var replay = sendAuthorizedJson("POST", path, """
+                {
+                  "code": "123456"
+                }
+                """);
+
+        assertThat(replay.statusCode()).isEqualTo(401);
+        assertContentType(replay, "application/problem+json");
+        var problem = objectMapper.readTree(replay.body());
+        assertThat(problem.path("type").asText()).isEqualTo("urn:digital-bank:mfa:challenge-replayed");
+        assertThat(problem.path("title").asText()).isEqualTo("MFA challenge replayed");
+    }
+
+    @Test
+    void returnsProblemWhenChallengeExhaustsItsAttempts() throws Exception {
+        var enrollmentId = activateEnrollment();
+        var challengeResponse = sendAuthorizedJson("POST", "/api/v1/mfa/challenges", """
+                {
+                  "enrollmentId": "%s"
+                }
+                """.formatted(enrollmentId));
+        var challengeId = objectMapper
+                .readTree(challengeResponse.body())
+                .path("challengeId")
+                .asText();
+        var path = "/api/v1/mfa/challenges/" + challengeId + "/verifications";
+
+        HttpResponse<String> response = null;
+        for (var attempt = 0; attempt < 5; attempt++) {
+            response = sendAuthorizedJson("POST", path, """
+                    {
+                      "code": "000000"
+                    }
+                    """);
+        }
+
+        assertThat(response).isNotNull();
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertContentType(response, "application/problem+json");
+        var problem = objectMapper.readTree(response.body());
+        assertThat(problem.path("type").asText()).isEqualTo("urn:digital-bank:mfa:challenge-exhausted");
+        assertThat(problem.path("title").asText()).isEqualTo("MFA challenge exhausted");
+        assertThat(problem.path("remainingAttempts").asInt()).isZero();
+    }
+
+    @Test
     void bindsEnrollmentToAuthenticatedSubjectInsteadOfRequestSubject() throws Exception {
         var enrollmentResponse = sendAuthorizedJson("POST", "/api/v1/mfa/enrollments", """
                 {
@@ -469,6 +534,36 @@ class MfaApiIT {
                         .path("remainingAttempts")
                         .asInt())
                 .isEqualTo(4);
+        assertThat(verifyChallengeResponses
+                        .path("401")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("expired")
+                        .path("value")
+                        .path("type")
+                        .asText())
+                .isEqualTo("urn:digital-bank:mfa:challenge-expired");
+        assertThat(verifyChallengeResponses
+                        .path("401")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("exhausted")
+                        .path("value")
+                        .path("type")
+                        .asText())
+                .isEqualTo("urn:digital-bank:mfa:challenge-exhausted");
+        assertThat(verifyChallengeResponses
+                        .path("401")
+                        .path("content")
+                        .path("application/problem+json")
+                        .path("examples")
+                        .path("replayed")
+                        .path("value")
+                        .path("type")
+                        .asText())
+                .isEqualTo("urn:digital-bank:mfa:challenge-replayed");
         assertThat(verifyChallengeResponses
                         .path("400")
                         .path("content")
