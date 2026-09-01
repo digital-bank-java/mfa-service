@@ -197,6 +197,44 @@ class MfaChallengeServiceTest {
     }
 
     @Test
+    void concurrentValidVerificationsConsumeChallengeOnlyOnce() throws Exception {
+        service.create(ENROLLMENT_ID, "subject-1");
+        provider.setVerificationResult(true);
+        var providerEntered = new CountDownLatch(1);
+        var releaseProvider = new CountDownLatch(1);
+        provider.setBeforeReturn(() -> {
+            providerEntered.countDown();
+            try {
+                if (!releaseProvider.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("provider was not released");
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(exception);
+            }
+        });
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            var first = executor.submit(() -> service.verify(CHALLENGE_ID, "subject-1", "123456"));
+            assertThat(providerEntered.await(5, TimeUnit.SECONDS)).isTrue();
+            var second = executor.submit(() -> service.verify(CHALLENGE_ID, "subject-1", "123456"));
+            releaseProvider.countDown();
+
+            var firstResult = first.get(5, TimeUnit.SECONDS);
+            var secondResult = second.get(5, TimeUnit.SECONDS);
+
+            assertThat(java.util.List.of(firstResult.status(), secondResult.status()))
+                    .containsExactlyInAnyOrder(ChallengeOutcome.VERIFIED, ChallengeOutcome.REPLAYED);
+            assertThat(provider.verificationCalls()).isEqualTo(1);
+            assertThat(challengeStore.find(CHALLENGE_ID).orElseThrow().status()).isEqualTo(ChallengeStatus.CONSUMED);
+        } finally {
+            releaseProvider.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void responseStateMatchesTheTransitionThatProducedItsOutcome() throws Exception {
         var firstVerificationThread = new java.util.concurrent.atomic.AtomicReference<String>();
         var store = new BlockingResultChallengeStore(firstVerificationThread);
