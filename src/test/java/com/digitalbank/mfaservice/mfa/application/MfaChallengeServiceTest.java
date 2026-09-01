@@ -1,6 +1,7 @@
 package com.digitalbank.mfaservice.mfa.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.digitalbank.mfaservice.mfa.adapter.memory.InMemoryChallengeStore;
 import com.digitalbank.mfaservice.mfa.adapter.memory.InMemoryEnrollmentStore;
@@ -64,6 +65,14 @@ class MfaChallengeServiceTest {
         assertThat(result.challengeStatus()).isEqualTo(ChallengeStatus.OPEN);
         assertThat(result.expiresAt()).isEqualTo(EXPIRES_AT);
         assertThat(result.remainingAttempts()).isEqualTo(3);
+    }
+
+    @Test
+    void rejectsChallengeTtlBeyondTheSecurityBound() {
+        assertThatThrownBy(() -> new MfaChallengeService(
+                        enrollmentStore, challengeStore, provider, identifiers, clock, Duration.ofMinutes(16), 3))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Challenge TTL must not exceed 15 minutes");
     }
 
     @Test
@@ -185,6 +194,44 @@ class MfaChallengeServiceTest {
         assertThat(replay.status()).isEqualTo(ChallengeOutcome.REPLAYED);
         assertThat(replay.challengeStatus()).isEqualTo(ChallengeStatus.CONSUMED);
         assertThat(provider.verificationCalls()).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentValidVerificationsConsumeChallengeOnlyOnce() throws Exception {
+        service.create(ENROLLMENT_ID, "subject-1");
+        provider.setVerificationResult(true);
+        var providerEntered = new CountDownLatch(1);
+        var releaseProvider = new CountDownLatch(1);
+        provider.setBeforeReturn(() -> {
+            providerEntered.countDown();
+            try {
+                if (!releaseProvider.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("provider was not released");
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(exception);
+            }
+        });
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            var first = executor.submit(() -> service.verify(CHALLENGE_ID, "subject-1", "123456"));
+            assertThat(providerEntered.await(5, TimeUnit.SECONDS)).isTrue();
+            var second = executor.submit(() -> service.verify(CHALLENGE_ID, "subject-1", "123456"));
+            releaseProvider.countDown();
+
+            var firstResult = first.get(5, TimeUnit.SECONDS);
+            var secondResult = second.get(5, TimeUnit.SECONDS);
+
+            assertThat(java.util.List.of(firstResult.status(), secondResult.status()))
+                    .containsExactlyInAnyOrder(ChallengeOutcome.VERIFIED, ChallengeOutcome.REPLAYED);
+            assertThat(provider.verificationCalls()).isEqualTo(1);
+            assertThat(challengeStore.find(CHALLENGE_ID).orElseThrow().status()).isEqualTo(ChallengeStatus.CONSUMED);
+        } finally {
+            releaseProvider.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.digitalbank.mfaservice.mfa.config;
 
+import com.digitalbank.mfaservice.mfa.domain.Challenge;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -18,6 +19,9 @@ public class MfaProperties {
     public void setTtl(Duration ttl) {
         if (ttl == null || ttl.isZero() || ttl.isNegative()) {
             throw new IllegalArgumentException("Challenge TTL must be positive");
+        }
+        if (ttl.compareTo(Challenge.MAX_TTL) > 0) {
+            throw new IllegalArgumentException("Challenge TTL must not exceed 15 minutes");
         }
         this.ttl = ttl;
     }

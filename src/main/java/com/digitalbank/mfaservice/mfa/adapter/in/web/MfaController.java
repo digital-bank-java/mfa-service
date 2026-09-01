@@ -199,6 +199,37 @@ class MfaController {
             }
             """;
 
+    private static final String CHALLENGE_EXPIRED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:challenge-expired",
+              "title": "MFA challenge expired",
+              "status": 401,
+              "detail": "The MFA challenge is no longer valid.",
+              "instance": "/api/v1/mfa/challenges/challenge-1/verifications"
+            }
+            """;
+
+    private static final String CHALLENGE_EXHAUSTED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:challenge-exhausted",
+              "title": "MFA challenge exhausted",
+              "status": 401,
+              "detail": "The MFA challenge has no remaining verification attempts.",
+              "instance": "/api/v1/mfa/challenges/challenge-1/verifications",
+              "remainingAttempts": 0
+            }
+            """;
+
+    private static final String CHALLENGE_REPLAYED_PROBLEM_EXAMPLE = """
+            {
+              "type": "urn:digital-bank:mfa:challenge-replayed",
+              "title": "MFA challenge replayed",
+              "status": 401,
+              "detail": "The MFA challenge was already consumed and cannot be replayed.",
+              "instance": "/api/v1/mfa/challenges/challenge-1/verifications"
+            }
+            """;
+
     private static final String VERIFY_ENROLLMENT_RESOURCE_NOT_FOUND_PROBLEM_EXAMPLE = """
             {
               "type": "urn:digital-bank:mfa:resource-not-found",
@@ -510,7 +541,10 @@ class MfaController {
                                 @ExampleObject(
                                         name = "authentication-required",
                                         value = VERIFY_CHALLENGE_AUTHENTICATION_REQUIRED_PROBLEM_EXAMPLE),
-                                @ExampleObject(name = "invalid-code", value = CHALLENGE_INVALID_CODE_PROBLEM_EXAMPLE)
+                                @ExampleObject(name = "invalid-code", value = CHALLENGE_INVALID_CODE_PROBLEM_EXAMPLE),
+                                @ExampleObject(name = "expired", value = CHALLENGE_EXPIRED_PROBLEM_EXAMPLE),
+                                @ExampleObject(name = "exhausted", value = CHALLENGE_EXHAUSTED_PROBLEM_EXAMPLE),
+                                @ExampleObject(name = "replayed", value = CHALLENGE_REPLAYED_PROBLEM_EXAMPLE)
                             }))
     @ApiResponse(
             responseCode = "403",

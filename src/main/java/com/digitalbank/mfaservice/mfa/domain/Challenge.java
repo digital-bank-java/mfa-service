@@ -1,11 +1,14 @@
 package com.digitalbank.mfaservice.mfa.domain;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 public final class Challenge {
+
+    public static final Duration MAX_TTL = Duration.ofMinutes(15);
 
     private final ChallengeId id;
     private final EnrollmentId enrollmentId;
@@ -23,6 +26,9 @@ public final class Challenge {
         this.expiresAt = Objects.requireNonNull(expiresAt, "expiresAt");
         if (!expiresAt.isAfter(createdAt)) {
             throw new IllegalArgumentException("Challenge expiry must be after creation");
+        }
+        if (Duration.between(createdAt, expiresAt).compareTo(MAX_TTL) > 0) {
+            throw new IllegalArgumentException("Challenge TTL must not exceed 15 minutes");
         }
         if (maxAttempts < 1 || maxAttempts > 10) {
             throw new IllegalArgumentException("Challenge attempts must be between 1 and 10");
