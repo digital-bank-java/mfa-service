@@ -48,9 +48,9 @@ public final class MfaChallengeService {
         this.maxAttempts = maxAttempts;
     }
 
-    public ChallengeResult create(EnrollmentId enrollmentId) {
+    public ChallengeResult create(EnrollmentId enrollmentId, String subjectId) {
         var enrollment = enrollmentStore.find(enrollmentId);
-        if (enrollment.isEmpty()) {
+        if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
             return new ChallengeResult(ChallengeOutcome.ENROLLMENT_NOT_FOUND, null, null, null, 0);
         }
         if (enrollment.orElseThrow().status() != EnrollmentStatus.ACTIVE) {
@@ -72,19 +72,19 @@ public final class MfaChallengeService {
                 challenge.remainingAttempts());
     }
 
-    public ChallengeResult verify(ChallengeId challengeId, String code) {
+    public ChallengeResult verify(ChallengeId challengeId, String subjectId, String code) {
         var challenge = challengeStore.find(challengeId);
         if (challenge.isEmpty()) {
             return result(ChallengeOutcome.NOT_FOUND, challengeId);
         }
         var record = challenge.orElseThrow();
+        var enrollment = enrollmentStore.find(record.enrollmentId());
+        if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
+            return result(ChallengeOutcome.NOT_FOUND, challengeId);
+        }
         if (record.status() != ChallengeStatus.OPEN || !clock.instant().isBefore(record.expiresAt())) {
             var verification = record.verify(clock::instant, ignored -> false);
             return result(record, verification);
-        }
-        var enrollment = enrollmentStore.find(record.enrollmentId());
-        if (enrollment.isEmpty()) {
-            return result(ChallengeOutcome.ENROLLMENT_NOT_FOUND, challengeId);
         }
         var verification = record.verify(
                 clock::instant,

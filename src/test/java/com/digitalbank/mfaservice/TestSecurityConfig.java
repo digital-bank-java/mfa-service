@@ -18,6 +18,7 @@ class TestSecurityConfig {
 
     static final String ISSUER = "https://issuer.test.internal";
     static final String TEST_BEARER_TOKEN = "test-internal-jwt";
+    static final String FOREIGN_BEARER_TOKEN = "test-foreign-jwt";
     static final String WRONG_ISSUER_BEARER_TOKEN = "test-wrong-issuer-jwt";
     static final String EXPIRED_BEARER_TOKEN = "test-expired-jwt";
     static final String INSUFFICIENT_SCOPE_BEARER_TOKEN = "test-insufficient-scope-jwt";
@@ -35,18 +36,45 @@ class TestSecurityConfig {
             Jwt jwt =
                     switch (token) {
                         case TEST_BEARER_TOKEN ->
-                            jwt(token, ISSUER, now.minusSeconds(60), now.plusSeconds(3600), "mfa.internal");
+                            jwt(
+                                    token,
+                                    ISSUER,
+                                    now.minusSeconds(60),
+                                    now.plusSeconds(3600),
+                                    "mfa.internal",
+                                    "subject-1");
+                        case FOREIGN_BEARER_TOKEN ->
+                            jwt(
+                                    token,
+                                    ISSUER,
+                                    now.minusSeconds(60),
+                                    now.plusSeconds(3600),
+                                    "mfa.internal",
+                                    "subject-2");
                         case WRONG_ISSUER_BEARER_TOKEN ->
                             jwt(
                                     token,
                                     "https://wrong-issuer.test.internal",
                                     now.minusSeconds(60),
                                     now.plusSeconds(3600),
-                                    "mfa.internal");
+                                    "mfa.internal",
+                                    "internal-client");
                         case EXPIRED_BEARER_TOKEN ->
-                            jwt(token, ISSUER, now.minusSeconds(3600), now.minusSeconds(60), "mfa.internal");
+                            jwt(
+                                    token,
+                                    ISSUER,
+                                    now.minusSeconds(3600),
+                                    now.minusSeconds(60),
+                                    "mfa.internal",
+                                    "internal-client");
                         case INSUFFICIENT_SCOPE_BEARER_TOKEN ->
-                            jwt(token, ISSUER, now.minusSeconds(60), now.plusSeconds(3600), "other.scope");
+                            jwt(
+                                    token,
+                                    ISSUER,
+                                    now.minusSeconds(60),
+                                    now.plusSeconds(3600),
+                                    "other.scope",
+                                    "internal-client");
                         default -> throw new JwtException("Invalid token");
                     };
             OAuth2TokenValidatorResult result = validator.validate(jwt);
@@ -57,10 +85,11 @@ class TestSecurityConfig {
         };
     }
 
-    private static Jwt jwt(String token, String issuer, Instant issuedAt, Instant expiresAt, String scope) {
+    private static Jwt jwt(
+            String token, String issuer, Instant issuedAt, Instant expiresAt, String scope, String subject) {
         return Jwt.withTokenValue(token)
                 .header("alg", "none")
-                .subject("internal-client")
+                .subject(subject)
                 .issuer(issuer)
                 .issuedAt(issuedAt)
                 .expiresAt(expiresAt)

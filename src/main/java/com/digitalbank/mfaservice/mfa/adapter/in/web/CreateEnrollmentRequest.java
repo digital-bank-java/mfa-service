@@ -1,9 +1,11 @@
 package com.digitalbank.mfaservice.mfa.adapter.in.web;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 
 record CreateEnrollmentRequest(
-        @NotBlank
-        @Schema(description = "Opaque subject identifier that owns the MFA enrollment", example = "customer-123")
+        @Schema(
+                description =
+                        "Legacy subject identifier accepted for compatibility and ignored; ownership is derived from the authenticated JWT sub claim.",
+                example = "customer-123",
+                deprecated = true)
         String subjectId) {}

@@ -29,6 +29,15 @@ final class MfaProblemException extends RuntimeException {
                 Map.of());
     }
 
+    static MfaProblemException accessDenied(String detail) {
+        return new MfaProblemException(
+                HttpStatus.FORBIDDEN,
+                URI.create("urn:digital-bank:mfa:access-denied"),
+                "MFA access denied",
+                detail,
+                Map.of());
+    }
+
     static MfaProblemException invalidCode(String detail) {
         return invalidCode(detail, null);
     }
