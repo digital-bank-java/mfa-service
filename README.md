@@ -1,6 +1,6 @@
 # Multi-Factor Authentication Service
 
-Multi-Factor Authentication Service is the Digital Bank Java platform boundary for future multi-factor authentication workflows. This repository currently contains only a deployable Spring Boot baseline; TOTP enrollment, challenge verification, recovery, and provider integrations are intentionally out of scope for this bootstrap issue.
+Multi-Factor Authentication Service is the Digital Bank Java platform boundary for multi-factor authentication workflows. This repository contains the deployable Spring Boot baseline plus a transport-neutral TOTP enrollment and MFA challenge foundation. No business HTTP routes are exposed in this wave.
 
 ## Implemented State
 
@@ -8,12 +8,21 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 - Spring Cloud Config Client integration for externalized runtime configuration.
 - Actuator health, liveness, and readiness probes.
 - Explicit internal OpenAPI metadata at `/v3/api-docs`.
+- TOTP enrollment and activation application ports backed by an in-memory credential adapter.
+- MFA challenge creation and verification with expiry, bounded attempts, and replay-safe terminal states.
+- Standard `dev.samstevens.totp:totp:1.7.1` adapter for TOTP generation and verification.
 - Non-root container image and hardened Helm deployment.
 - Default SIT service port `8087`.
 
 ## Boundaries
 
-This service will later own MFA policy and provider integration boundaries. It does not currently own customer identity data, login orchestration, TOTP secrets, recovery codes, Kafka behavior, persistence, or authorization decisions.
+This service will later own MFA policy and provider integration boundaries. The current application foundation does not own customer identity data, login orchestration, recovery codes, Kafka behavior, durable persistence, authorization decisions, or API transport.
+
+TOTP enrollment results contain only an opaque enrollment id and lifecycle status. The generated secret is held only inside the credential store and is never returned by application results or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
+
+Challenge verification is fail-closed at `now >= expiresAt`. Wrong codes consume one attempt, the final failed attempt moves the challenge to `EXHAUSTED`, a valid code moves it to `CONSUMED`, and later verification of a consumed challenge returns a replay outcome without calling the TOTP provider again. The default challenge TTL is `PT5M` and the default maximum is `5` attempts; both are configurable through `mfa.challenge.ttl` and `mfa.challenge.max-attempts` and remain subject to the 1 through 10 attempt bound.
+
+The application services accept `java.time.Clock` and identifier-generator ports so unit tests can use fixed time and deterministic ids. See [Problem Details guidance](docs/problem-details.md) for the future inbound transport mapping. No Insomnia requests are included because this release adds no HTTP API.
 
 MFA provider integrations must remain behind outbound ports and adapters when that work is approved and tracked. Never commit enrollment secrets, recovery codes, tokens, or production credentials to this repository.
 
@@ -26,6 +35,13 @@ Config Server supplies the effective runtime configuration. The service reposito
 | `CONFIG_SERVER_URL` | Config Server base URL | `http://localhost:8888` |
 | `SPRING_PROFILES_ACTIVE` | Runtime environment profile | Spring `default` profile |
 | `SERVER_PORT` | Workstation/container HTTP port | `8087` |
+
+MFA foundation defaults:
+
+| Property | Purpose | Default |
+| --- | --- | --- |
+| `mfa.challenge.ttl` | Challenge lifetime | `PT5M` |
+| `mfa.challenge.max-attempts` | Maximum failed verification attempts | `5` |
 
 The formal environments are `sit`, `uat`, and `prod`. `sit` runs on local Docker Desktop Kubernetes; `uat` and `prod` are future AWS environments. `local` is not an active environment or Spring profile. Workstation debugging uses the `sit` profile with temporary overrides against forwarded SIT dependencies.
 
@@ -124,7 +140,7 @@ curl --fail http://localhost:18087/actuator/health
 curl --fail http://localhost:18087/v3/api-docs
 ```
 
-Normal platform access should later flow through the API Gateway. No MFA business route is exposed by this bootstrap.
+Normal platform access should later flow through the API Gateway. No MFA business route is exposed by this foundation.
 
 ## CI
 
@@ -145,3 +161,7 @@ git diff --check
 ```
 
 All changes require review by the CODEOWNERS maintainer. Never commit credentials, tokens, MFA secrets, recovery codes, customer information, or production endpoints.
+
+## Follow-Up Integration
+
+Auth-service orchestration, step-up policy, durable secret and challenge storage, external provider adapters, recovery codes, API Gateway routes, and Insomnia requests are later tasks linked to organization issues [#49](https://github.com/digital-bank-java/.github/issues/49), [#50](https://github.com/digital-bank-java/.github/issues/50), and [#51](https://github.com/digital-bank-java/.github/issues/51). The bootstrap PR [#1](https://github.com/digital-bank-java/mfa-service/pull/1) remains the required runtime/build dependency for this foundation.
