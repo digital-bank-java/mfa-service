@@ -2,7 +2,8 @@ package com.digitalbank.mfaservice.mfa.domain;
 
 import java.time.Instant;
 import java.util.Objects;
-import java.util.function.BooleanSupplier;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 public final class Challenge {
 
@@ -59,29 +60,45 @@ public final class Challenge {
         return maxAttempts - failedAttempts;
     }
 
-    public synchronized ChallengeVerificationStatus verify(Instant now, BooleanSupplier codeVerifier) {
-        Objects.requireNonNull(now, "now");
+    public synchronized ChallengeVerification verify(
+            Supplier<Instant> nowSupplier, Function<Instant, Boolean> codeVerifier) {
+        Objects.requireNonNull(nowSupplier, "nowSupplier");
         Objects.requireNonNull(codeVerifier, "codeVerifier");
+        var now = Objects.requireNonNull(nowSupplier.get(), "now");
         if (status == ChallengeStatus.CONSUMED) {
-            return ChallengeVerificationStatus.REPLAYED;
+            return snapshot(ChallengeVerificationStatus.REPLAYED);
         }
         if (status == ChallengeStatus.EXHAUSTED) {
-            return ChallengeVerificationStatus.EXHAUSTED;
+            return snapshot(ChallengeVerificationStatus.EXHAUSTED);
         }
         if (status == ChallengeStatus.EXPIRED || !now.isBefore(expiresAt)) {
             status = ChallengeStatus.EXPIRED;
-            return ChallengeVerificationStatus.EXPIRED;
+            return snapshot(ChallengeVerificationStatus.EXPIRED);
         }
-        if (codeVerifier.getAsBoolean()) {
+        var verificationAt = Objects.requireNonNull(nowSupplier.get(), "verificationAt");
+        if (!verificationAt.isBefore(expiresAt)) {
+            status = ChallengeStatus.EXPIRED;
+            return snapshot(ChallengeVerificationStatus.EXPIRED);
+        }
+        var codeAccepted = Boolean.TRUE.equals(codeVerifier.apply(verificationAt));
+        if (!Objects.requireNonNull(nowSupplier.get(), "completionTime").isBefore(expiresAt)) {
+            status = ChallengeStatus.EXPIRED;
+            return snapshot(ChallengeVerificationStatus.EXPIRED);
+        }
+        if (codeAccepted) {
             status = ChallengeStatus.CONSUMED;
-            return ChallengeVerificationStatus.VERIFIED;
+            return snapshot(ChallengeVerificationStatus.VERIFIED);
         }
         failedAttempts++;
         if (failedAttempts >= maxAttempts) {
             status = ChallengeStatus.EXHAUSTED;
-            return ChallengeVerificationStatus.EXHAUSTED;
+            return snapshot(ChallengeVerificationStatus.EXHAUSTED);
         }
-        return ChallengeVerificationStatus.INVALID_CODE;
+        return snapshot(ChallengeVerificationStatus.INVALID_CODE);
+    }
+
+    private ChallengeVerification snapshot(ChallengeVerificationStatus verificationStatus) {
+        return new ChallengeVerification(verificationStatus, status, maxAttempts - failedAttempts);
     }
 
     @Override

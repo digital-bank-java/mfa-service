@@ -29,7 +29,7 @@ class TotpEnrollmentServiceTest {
     }
 
     @Test
-    void enrollmentCreatesPendingRecordWithoutDisclosingSecret() {
+    void enrollmentCreatesPendingRecordWithoutDisclosingSecretInResultsOrToString() {
         EnrollmentResult result = service.enroll("subject-1");
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.ENROLLED);

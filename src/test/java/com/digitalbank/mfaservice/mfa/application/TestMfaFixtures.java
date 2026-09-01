@@ -17,6 +17,7 @@ final class TestMfaFixtures {
         private int verificationCalls;
         private String lastVerifiedSecret;
         private Instant lastVerifiedInstant;
+        private Runnable beforeReturn = () -> {};
 
         FakeTotpProvider(String secret) {
             this.secret = secret;
@@ -32,6 +33,7 @@ final class TestMfaFixtures {
             verificationCalls++;
             lastVerifiedSecret = secret;
             lastVerifiedInstant = at;
+            beforeReturn.run();
             return verificationResult;
         }
 
@@ -45,6 +47,10 @@ final class TestMfaFixtures {
 
         void resetVerificationCalls() {
             verificationCalls = 0;
+        }
+
+        void setBeforeReturn(Runnable beforeReturn) {
+            this.beforeReturn = beforeReturn;
         }
 
         String lastVerifiedSecret() {

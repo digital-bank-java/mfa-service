@@ -10,7 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        classes = {MfaServiceApplication.class, TestSecurityConfig.class})
 class MfaServiceApplicationIT {
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -20,7 +22,7 @@ class MfaServiceApplicationIT {
 
     @Test
     void healthEndpointReportsUp() throws Exception {
-        var response = get("/actuator/health");
+        var response = getResponse("/actuator/health");
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"status\":\"UP\"");
@@ -28,7 +30,7 @@ class MfaServiceApplicationIT {
 
     @Test
     void livenessProbeReportsUp() throws Exception {
-        var response = get("/actuator/health/liveness");
+        var response = getResponse("/actuator/health/liveness");
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"status\":\"UP\"");
@@ -36,7 +38,7 @@ class MfaServiceApplicationIT {
 
     @Test
     void readinessProbeReportsUp() throws Exception {
-        var response = get("/actuator/health/readiness");
+        var response = getResponse("/actuator/health/readiness");
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"status\":\"UP\"");
@@ -44,15 +46,24 @@ class MfaServiceApplicationIT {
 
     @Test
     void openApiDocumentPublishesServiceMetadata() throws Exception {
-        var response = get("/v3/api-docs");
+        var response = getResponse("/v3/api-docs");
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body())
                 .contains("\"title\":\"Digital Bank Multi-Factor Authentication Service API\"")
-                .contains("\"version\":\"1.0.0\"");
+                .contains("\"version\":\"1.0.0\"")
+                .contains("\"/api/v1/mfa/enrollments\"")
+                .contains("\"/api/v1/mfa/challenges\"");
     }
 
-    private HttpResponse<String> get(String path) throws Exception {
+    @Test
+    void swaggerUiSurfaceIsDisabled() throws Exception {
+        var response = getResponse("/swagger-ui/index.html");
+
+        assertThat(response.statusCode()).isEqualTo(404);
+    }
+
+    private HttpResponse<String> getResponse(String path) throws Exception {
         return httpClient.send(
                 HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                         .GET()
