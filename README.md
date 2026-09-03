@@ -1,19 +1,32 @@
 # Multi-Factor Authentication Service
 
-Multi-Factor Authentication Service is the Digital Bank Java platform boundary for future multi-factor authentication workflows. This repository currently contains only a deployable Spring Boot baseline; TOTP enrollment, challenge verification, recovery, and provider integrations are intentionally out of scope for this bootstrap issue.
+Multi-Factor Authentication Service is the Digital Bank Java platform boundary for multi-factor authentication workflows. This repository contains the deployable Spring Boot baseline, the transport-neutral TOTP enrollment and MFA challenge foundation, and the first HTTP input adapter for enrollment and verification workflows.
 
 ## Implemented State
 
 - Java 21 Spring Boot service named `mfa-service`.
 - Spring Cloud Config Client integration for externalized runtime configuration.
 - Actuator health, liveness, and readiness probes.
-- Explicit internal OpenAPI metadata at `/v3/api-docs`.
+- Explicit OpenAPI metadata at `/v3/api-docs`; service-local Swagger UI is disabled.
+- Internal MFA HTTP routes protected by a JWT bearer-token resource-server boundary.
+- TOTP enrollment and activation application ports backed by an in-memory credential adapter.
+- MFA challenge creation and verification with expiry, bounded attempts, and replay-safe terminal states.
+- HTTP APIs for MFA enrollment creation, enrollment verification, challenge creation, and challenge verification.
+- Standard `dev.samstevens.totp:totp:1.7.1` adapter for TOTP generation and verification.
 - Non-root container image and hardened Helm deployment.
 - Default SIT service port `8087`.
 
 ## Boundaries
 
-This service will later own MFA policy and provider integration boundaries. It does not currently own customer identity data, login orchestration, TOTP secrets, recovery codes, Kafka behavior, persistence, or authorization decisions.
+This service will later own MFA policy and provider integration boundaries. The current implementation does not own customer identity data, login orchestration, recovery codes, Kafka behavior, durable persistence, or API Gateway routing. It does enforce the MFA endpoint scope and resource ownership authorization described below.
+
+TOTP enrollment and challenge responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. The generated secret is held only inside the credential store and is never returned in HTTP responses, application results, or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
+
+Challenge verification is fail-closed at `now >= expiresAt`. Wrong codes consume one attempt, the final failed attempt moves the challenge to `EXHAUSTED`, a valid code moves it to `CONSUMED`, and later verification of a consumed challenge returns a replay outcome without calling the TOTP provider again. The default challenge TTL is `PT5M`, the maximum challenge TTL is `PT15M`, and the default maximum is `5` attempts; both settings are configurable through `mfa.challenge.ttl` and `mfa.challenge.max-attempts` and remain subject to their security bounds.
+
+Enrollment verification is an atomic one-time transition: a valid code changes `PENDING` to `ACTIVE`, an invalid code leaves the enrollment pending, and repeated or competing verification after activation returns an already-active outcome without invoking the TOTP provider again.
+
+The application services accept `java.time.Clock` and identifier-generator ports so unit tests can use fixed time and deterministic ids. See [Problem Details guidance](docs/problem-details.md) for the HTTP failure contract. This repository does not currently maintain a service-local Insomnia collection.
 
 MFA provider integrations must remain behind outbound ports and adapters when that work is approved and tracked. Never commit enrollment secrets, recovery codes, tokens, or production credentials to this repository.
 
@@ -27,7 +40,74 @@ Config Server supplies the effective runtime configuration. The service reposito
 | `SPRING_PROFILES_ACTIVE` | Runtime environment profile | Spring `default` profile |
 | `SERVER_PORT` | Workstation/container HTTP port | `8087` |
 
+MFA foundation defaults:
+
+| Property | Purpose | Default |
+| --- | --- | --- |
+| `mfa.challenge.ttl` | Challenge lifetime; maximum `PT15M` | `PT5M` |
+| `mfa.challenge.max-attempts` | Maximum failed verification attempts; range `1` through `10` | `5` |
+
+Internal endpoint authentication depends on standard Spring Security resource-server JWT configuration supplied by Config Server or explicit runtime overrides:
+
+| Property | Purpose | Default |
+| --- | --- | --- |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | JWT issuer for internal service authentication | none |
+| `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` | JWK set endpoint for internal service authentication | none |
+
+`spring.security.oauth2.resourceserver.jwt.issuer-uri` is the required trust anchor for MFA endpoint authentication. When `jwk-set-uri` is configured, the decoder still validates the token issuer against `issuer-uri`; JWK material alone is not treated as sufficient trust configuration.
+
 The formal environments are `sit`, `uat`, and `prod`. `sit` runs on local Docker Desktop Kubernetes; `uat` and `prod` are future AWS environments. `local` is not an active environment or Spring profile. Workstation debugging uses the `sit` profile with temporary overrides against forwarded SIT dependencies.
+
+## HTTP API
+
+The service exposes these routes directly on `mfa-service`:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/mfa/enrollments` | Create a pending MFA enrollment for the authenticated JWT subject. |
+| `POST` | `/api/v1/mfa/enrollments/{enrollmentId}/verifications` | Verify a pending enrollment with a 6-digit TOTP code and activate it. |
+| `POST` | `/api/v1/mfa/challenges` | Create an MFA challenge for an active enrollment. |
+| `POST` | `/api/v1/mfa/challenges/{challengeId}/verifications` | Verify an MFA challenge with a 6-digit TOTP code. |
+
+All `/api/v1/mfa/**` routes require an internal bearer JWT. Success responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. Raw TOTP secrets, provisioning URIs, and submitted codes are never returned.
+
+Enrollment ownership is derived exclusively from the authenticated JWT `sub` claim. The legacy `subjectId` request field remains accepted for client compatibility but is ignored and is not an authorization input. Enrollment and challenge identifiers are also checked against that authenticated subject; missing and foreign resources use the same controlled `404` resource-not-found problem.
+
+Representative requests:
+
+```bash
+curl --request POST http://localhost:8087/api/v1/mfa/enrollments \
+  --header 'Authorization: Bearer <internal-jwt>' \
+  --header 'Content-Type: application/json' \
+  --data '{}'
+
+curl --request POST http://localhost:8087/api/v1/mfa/enrollments/<enrollment-id>/verifications \
+  --header 'Authorization: Bearer <internal-jwt>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "code": "123456"
+  }'
+
+curl --request POST http://localhost:8087/api/v1/mfa/challenges \
+  --header 'Authorization: Bearer <internal-jwt>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "enrollmentId": "<enrollment-id>"
+  }'
+
+curl --request POST http://localhost:8087/api/v1/mfa/challenges/<challenge-id>/verifications \
+  --header 'Authorization: Bearer <internal-jwt>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "code": "123456"
+  }'
+```
+
+Error responses use `application/problem+json`. Authentication failures return `401` with `urn:digital-bank:mfa:authentication-required`, authorization failures return `403` with `urn:digital-bank:mfa:access-denied`, validation failures return `400`, unknown resources return `404`, enrollment state conflicts return `409`, and invalid or expired challenge verification outcomes return `401`.
+
+`/v3/api-docs` remains available for internal machine-readable contract publication. Service-local Swagger UI is disabled; the platform-owned interactive documentation surface belongs at the API Gateway.
+
+This repository does not invent or transport TOTP provisioning secrets over HTTP. MFA enrollment remains usable only once the platform-owned authenticator provisioning path is integrated. Until then, the HTTP adapter exposes the approved internal enrollment and challenge contract without secret-bearing response fields.
 
 Before deploying to SIT, the Config Server's backing `config-repo` should contain the `mfa-service` defaults and SIT override from config-repo PR [#32](https://github.com/digital-bank-java/config-repo/pull/32). Without those service-specific files, Config Server can still return shared configuration and the service can start with its local port default, but the intended `mfa-service` metadata is absent. The mandatory Config Client import still fails startup when Config Server itself is unavailable.
 
@@ -38,6 +118,7 @@ Before deploying to SIT, the Config Server's backing `config-repo` should contai
 - Docker Desktop for image builds.
 - Helm 4 and Docker Desktop Kubernetes for local SIT deployment.
 - A healthy Config Server for normal application startup.
+- Platform-provided JWT resource-server configuration for authenticated MFA routes.
 
 The Maven Wrapper is included, so a global Maven installation is not required.
 
@@ -63,7 +144,7 @@ Run integration tests and package verification:
 ./mvnw --batch-mode --no-transfer-progress verify -DskipUnitTests=true
 ```
 
-The integration test disables Config Client and validates health, liveness, readiness, plus the OpenAPI title and contract version using a random application port.
+The integration tests disable Config Client and validate health, liveness, readiness, the MFA HTTP contract, the disabled Swagger UI surface, and the published OpenAPI document through real random-port HTTP requests.
 
 ## Run With Docker
 
@@ -73,7 +154,7 @@ Build the image:
 docker build -t digital-bank-java/mfa-service:0.0.1 .
 ```
 
-Run it against a reachable Config Server:
+Run it against a reachable Config Server and JWT issuer/JWK configuration:
 
 ```bash
 docker run --rm \
@@ -81,6 +162,7 @@ docker run --rm \
   --publish 8087:8087 \
   --env CONFIG_SERVER_URL=http://host.docker.internal:8888 \
   --env SPRING_PROFILES_ACTIVE=sit \
+  --env SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://issuer.example.internal \
   digital-bank-java/mfa-service:0.0.1
 ```
 
@@ -124,7 +206,7 @@ curl --fail http://localhost:18087/actuator/health
 curl --fail http://localhost:18087/v3/api-docs
 ```
 
-Normal platform access should later flow through the API Gateway. No MFA business route is exposed by this bootstrap.
+Normal platform access should later flow through the API Gateway. This repository only exposes the service-local HTTP input adapter and does not include gateway route configuration.
 
 ## CI
 
@@ -145,3 +227,7 @@ git diff --check
 ```
 
 All changes require review by the CODEOWNERS maintainer. Never commit credentials, tokens, MFA secrets, recovery codes, customer information, or production endpoints.
+
+## Follow-Up Integration
+
+Auth-service orchestration, step-up policy, durable secret and challenge storage, external provider adapters, recovery codes, API Gateway routes, and any future shared API client collections remain follow-up work linked to organization issues [#49](https://github.com/digital-bank-java/.github/issues/49), [#50](https://github.com/digital-bank-java/.github/issues/50), and [#51](https://github.com/digital-bank-java/.github/issues/51). The bootstrap PR [#1](https://github.com/digital-bank-java/mfa-service/pull/1) remains the required runtime/build dependency for this foundation.
