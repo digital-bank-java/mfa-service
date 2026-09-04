@@ -28,6 +28,15 @@ class JwtDecoderConfigurationTest {
     }
 
     @Test
+    void createsHmacDecoderFromSharedSitSecretWhenOidcIsNotConfigured() {
+        contextRunner
+                .withPropertyValues(
+                        "auth.jwt.secret=YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+                        "auth.jwt.issuer=digital-bank-auth")
+                .run(context -> assertThat(context).hasSingleBean(JwtDecoder.class));
+    }
+
+    @Test
     void allowsATestDecoderOverrideWithoutProductionIssuerConfiguration() {
         new ApplicationContextRunner()
                 .withUserConfiguration(JwtDecoderConfiguration.class, TestDecoderConfiguration.class)
