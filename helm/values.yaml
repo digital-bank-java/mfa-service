@@ -12,6 +12,16 @@ runtime:
   profile: default
   configServerUrl: http://config-server:8888
 
+database:
+  url: jdbc:postgresql://postgres:5432/mfa_service
+  secretName: postgres
+  usernameKey: POSTGRES_USER
+  passwordKey: POSTGRES_PASSWORD
+
+totp:
+  encryptionKeySecretName: mfa-service-secrets
+  encryptionKeySecretKey: MFA_TOTP_ENCRYPTION_KEY
+
 service:
   type: ClusterIP
   port: 8087

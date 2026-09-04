@@ -14,7 +14,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
                         title = "Digital Bank Multi-Factor Authentication Service API",
                         version = "1.0.0",
                         description =
-                                "Authenticated internal MFA enrollment and challenge verification APIs for the Digital Bank Java platform. This release exposes the HTTP input adapter on top of the existing in-memory MFA foundation without disclosing TOTP secret material."))
+                                "Authenticated internal MFA enrollment and challenge verification APIs for the Digital Bank Java platform. MFA state is durably persisted without disclosing TOTP secret material."))
 @SecurityScheme(name = "bearer-jwt", type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "JWT")
 @SpringBootApplication
 @ConfigurationPropertiesScan

@@ -2,6 +2,7 @@ package com.digitalbank.mfaservice.mfa.domain;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.function.Function;
 
 public final class Enrollment {
 
@@ -11,7 +12,8 @@ public final class Enrollment {
     private final TotpCredential credential;
     private EnrollmentStatus status;
 
-    private Enrollment(EnrollmentId id, String subjectId, Instant createdAt, TotpCredential credential) {
+    private Enrollment(
+            EnrollmentId id, String subjectId, Instant createdAt, TotpCredential credential, EnrollmentStatus status) {
         this.id = Objects.requireNonNull(id, "id");
         if (subjectId == null || subjectId.isBlank()) {
             throw new IllegalArgumentException("Subject id must not be blank");
@@ -19,11 +21,16 @@ public final class Enrollment {
         this.subjectId = subjectId;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.credential = Objects.requireNonNull(credential, "credential");
-        this.status = EnrollmentStatus.PENDING;
+        this.status = Objects.requireNonNull(status, "status");
     }
 
     public static Enrollment pending(EnrollmentId id, String subjectId, String secret, Instant createdAt) {
-        return new Enrollment(id, subjectId, createdAt, TotpCredential.fromSecret(secret));
+        return new Enrollment(id, subjectId, createdAt, TotpCredential.fromSecret(secret), EnrollmentStatus.PENDING);
+    }
+
+    public static Enrollment restore(
+            EnrollmentId id, String subjectId, String secret, Instant createdAt, EnrollmentStatus status) {
+        return new Enrollment(id, subjectId, createdAt, TotpCredential.fromSecret(secret), status);
     }
 
     public EnrollmentId id() {
@@ -40,6 +47,10 @@ public final class Enrollment {
 
     public synchronized EnrollmentStatus status() {
         return status;
+    }
+
+    public <T> T mapSecret(Function<String, T> operation) {
+        return credential.mapSecret(operation);
     }
 
     public synchronized EnrollmentVerificationOutcome verifyAndActivate(

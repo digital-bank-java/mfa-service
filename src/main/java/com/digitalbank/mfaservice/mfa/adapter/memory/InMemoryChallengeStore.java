@@ -13,7 +13,7 @@ public final class InMemoryChallengeStore implements ChallengeStore {
     @Override
     public void save(Challenge challenge) {
         var previous = challenges.putIfAbsent(challenge.id(), challenge);
-        if (previous != null) {
+        if (previous != null && previous != challenge) {
             throw new IllegalStateException("Challenge id already exists");
         }
     }
