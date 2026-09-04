@@ -5,6 +5,7 @@ import com.digitalbank.mfaservice.mfa.adapter.persistence.PostgresEnrollmentStor
 import com.digitalbank.mfaservice.mfa.adapter.persistence.TotpSecretProtector;
 import com.digitalbank.mfaservice.mfa.adapter.random.SecureMfaIdentifierGenerator;
 import com.digitalbank.mfaservice.mfa.adapter.totp.SamStevensTotpProvider;
+import com.digitalbank.mfaservice.mfa.application.MfaAssuranceOutboxStore;
 import com.digitalbank.mfaservice.mfa.application.MfaChallengeService;
 import com.digitalbank.mfaservice.mfa.application.TotpEnrollmentService;
 import com.digitalbank.mfaservice.mfa.application.port.ChallengeStore;
@@ -84,7 +85,8 @@ public class MfaConfiguration {
             MfaIdentifierGenerator identifierGenerator,
             Clock mfaClock,
             MfaProperties properties,
-            MfaTransactionRunner transactionRunner) {
+            MfaTransactionRunner transactionRunner,
+            MfaAssuranceOutboxStore assuranceOutbox) {
         return new MfaChallengeService(
                 enrollmentStore,
                 challengeStore,
@@ -93,6 +95,7 @@ public class MfaConfiguration {
                 mfaClock,
                 properties.getTtl(),
                 properties.getMaxAttempts(),
-                transactionRunner);
+                transactionRunner,
+                assuranceOutbox);
     }
 }

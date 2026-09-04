@@ -11,6 +11,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 - Internal MFA HTTP routes protected by a JWT bearer-token resource-server boundary.
 - TOTP enrollment and activation application ports backed by encrypted PostgreSQL persistence.
 - MFA challenge creation and verification with expiry, bounded attempts, and replay-safe terminal states.
+- Transfer-bound MFA challenge verification with durable `MfaAssuranceGranted.v1` outbox publication.
 - Flyway-managed PostgreSQL schema with transaction-locked enrollment and challenge state transitions.
 - HTTP APIs for MFA enrollment creation, enrollment verification, challenge creation, and challenge verification.
 - Standard `dev.samstevens.totp:totp:1.7.1` adapter for TOTP generation and verification.
@@ -19,7 +20,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 
 ## Boundaries
 
-This service owns MFA provider state persistence and policy boundaries. It does not own customer identity data, login orchestration, recovery codes, Kafka behavior, or API Gateway routing. It does enforce the MFA endpoint scope and resource ownership authorization described below.
+This service owns MFA provider state persistence and policy boundaries. It does not own customer identity data, login orchestration, recovery codes, or API Gateway routing. It publishes only the versioned transfer-assurance fact described below; it does not make transfer authorization decisions.
 
 TOTP enrollment and challenge responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. The generated secret is held only inside the credential store and is never returned in HTTP responses, application results, or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
 
@@ -43,6 +44,8 @@ Config Server supplies the effective runtime configuration. The service reposito
 | `MFA_DATASOURCE_URL` | PostgreSQL JDBC URL; Config Server or Helm supplies the effective value | `jdbc:postgresql://postgres:5432/mfa_service` |
 | `DB_USERNAME` / `DB_PASSWORD` | PostgreSQL credentials referenced by Config Server and Helm | none |
 | `MFA_TOTP_ENCRYPTION_KEY` | Base64 encoding of a 32-byte AES key used to protect TOTP secrets at rest | required |
+| `MFA_ASSURANCE_PUBLISHER_ENABLED` | Enables the opt-in Kafka outbox publisher | `false` |
+| `MFA_KAFKA_BOOTSTRAP_SERVERS` | Kafka broker addresses used only when assurance publishing is enabled | `localhost:9092` |
 
 MFA foundation defaults:
 
@@ -73,6 +76,8 @@ The service exposes these routes directly on `mfa-service`:
 | `POST` | `/api/v1/mfa/enrollments/{enrollmentId}/verifications` | Verify a pending enrollment with a 6-digit TOTP code and activate it. |
 | `POST` | `/api/v1/mfa/challenges` | Create an MFA challenge for an active enrollment. |
 | `POST` | `/api/v1/mfa/challenges/{challengeId}/verifications` | Verify an MFA challenge with a 6-digit TOTP code. |
+| `POST` | `/api/v1/mfa/transfer-challenges` | Create a challenge bound to an immutable transfer risk decision and transfer intent. |
+| `POST` | `/api/v1/mfa/transfer-challenges/{challengeId}/verifications` | Verify a transfer-bound challenge against its transfer and decision identifiers. |
 
 All `/api/v1/mfa/**` routes require an internal bearer JWT. Success responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. Raw TOTP secrets, provisioning URIs, and submitted codes are never returned.
 
@@ -112,6 +117,8 @@ Error responses use `application/problem+json`. Authentication failures return `
 
 `/v3/api-docs` remains available for internal machine-readable contract publication. Service-local Swagger UI is disabled; the platform-owned interactive documentation surface belongs at the API Gateway.
 
+Successful transfer-bound verification writes one `MfaAssuranceGranted.v1` event to the PostgreSQL outbox in the same transaction that consumes the challenge. The event is published to `mfa.assurance.granted.v1` with the persisted event id and payload; retries are at-least-once and consumers must deduplicate by `eventId`. Invalid, expired, replayed, or binding-mismatched verification never writes assurance.
+
 This repository does not invent or transport TOTP provisioning secrets over HTTP. MFA enrollment remains usable only once the platform-owned authenticator provisioning path is integrated. Until then, the HTTP adapter exposes the approved internal enrollment and challenge contract without secret-bearing response fields.
 
 Before deploying to SIT, the Config Server's backing `config-repo` should contain the `mfa-service` defaults and SIT override from config-repo PR [#32](https://github.com/digital-bank-java/config-repo/pull/32). Without those service-specific files, Config Server can still return shared configuration and the service can start with its local port default, but the intended `mfa-service` metadata is absent. The mandatory Config Client import still fails startup when Config Server itself is unavailable.
@@ -126,6 +133,8 @@ kubectl create secret generic mfa-service-secrets \
 ```
 
 The Helm chart reads PostgreSQL credentials from the existing `postgres` Secret and reads only the encryption key from `mfa-service-secrets`. Do not reuse a production key in SIT, and do not put either secret value in Helm values, Config Server Git, logs, or test assertions. Flyway creates the MFA tables on service startup; existing rows remain encrypted and are not rewritten by migration.
+
+Kafka assurance publishing is disabled by default. For SIT, opt in only after the contract topic and broker are provisioned, for example with `--set assurancePublisher.enabled=true --set kafka.bootstrapServers=kafka:9092`; no Kafka credentials or secret values belong in this chart.
 
 Persistence details, row-locking behavior, and the key boundary are documented in [MFA persistence](docs/mfa-persistence.md).
 
