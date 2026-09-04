@@ -18,7 +18,22 @@ record ChallengeResponse(
         Instant expiresAt,
 
         @Schema(description = "Remaining failed verification attempts", example = "5")
-        int remainingAttempts) {
+        int remainingAttempts,
+
+        @Schema(description = "Whether this response replays an existing transfer challenge", example = "false")
+        boolean replayed,
+
+        @Schema(description = "Transfer identifier bound to this challenge", example = "transfer-1")
+        String transferId,
+
+        @Schema(description = "Risk decision identifier bound to this challenge", example = "decision-1")
+        String decisionId,
+
+        @Schema(description = "Risk policy version bound to this challenge", example = "transfer-risk-policy-2026-09")
+        String policyVersion,
+
+        @Schema(description = "Correlation identifier bound to this challenge", example = "transfer-1")
+        String correlationId) {
 
     static ChallengeResponse from(ChallengeResult result) {
         return new ChallengeResponse(
@@ -28,6 +43,19 @@ record ChallengeResponse(
                         ? null
                         : result.challengeStatus().name(),
                 result.expiresAt(),
-                result.remainingAttempts());
+                result.remainingAttempts(),
+                result.replayed(),
+                result.transferBinding() == null
+                        ? null
+                        : result.transferBinding().transferId(),
+                result.transferBinding() == null
+                        ? null
+                        : result.transferBinding().decisionId(),
+                result.transferBinding() == null
+                        ? null
+                        : result.transferBinding().policyVersion(),
+                result.transferBinding() == null
+                        ? null
+                        : result.transferBinding().correlationId());
     }
 }

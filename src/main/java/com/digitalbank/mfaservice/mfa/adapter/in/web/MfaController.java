@@ -6,6 +6,7 @@ import com.digitalbank.mfaservice.mfa.application.MfaChallengeService;
 import com.digitalbank.mfaservice.mfa.application.TotpEnrollmentService;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeId;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
+import com.digitalbank.mfaservice.mfa.domain.TransferChallengeBinding;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -577,6 +578,80 @@ class MfaController {
         return ResponseEntity.ok(mapChallengeVerificationResult(result));
     }
 
+    @PostMapping("/api/v1/mfa/transfer-challenges")
+    @Operation(summary = "Create a transfer-bound MFA challenge")
+    @ApiResponse(
+            responseCode = "201",
+            description = "Transfer-bound challenge created",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ChallengeResponse.class)))
+    @ApiResponse(
+            responseCode = "200",
+            description = "Existing challenge replayed for the same decision",
+            headers =
+                    @Header(
+                            name = "Idempotent-Replay",
+                            description = "True when the existing challenge is returned.",
+                            schema = @Schema(type = "boolean")))
+    @ApiResponse(
+            responseCode = "409",
+            description = "Transfer binding conflicts with an existing decision",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class)))
+    ResponseEntity<ChallengeResponse> createTransferChallenge(
+            Authentication authentication, @Valid @RequestBody CreateTransferChallengeRequest request) {
+        var subjectId = authenticatedSubject(authentication);
+        var binding = new TransferChallengeBinding(
+                request.transferId(),
+                request.decisionId(),
+                subjectId,
+                request.sourceAccountId(),
+                request.destinationAccountId(),
+                request.amount(),
+                request.currency(),
+                request.policyVersion(),
+                request.correlationId());
+        var result =
+                challengeService.createTransferChallenge(new EnrollmentId(request.enrollmentId()), subjectId, binding);
+        var response = mapTransferChallengeResult(result);
+        var builder = ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
+                .header("Idempotent-Replay", Boolean.toString(result.replayed()));
+        if (!result.replayed()) {
+            builder.location(URI.create("/api/v1/mfa/transfer-challenges/" + response.challengeId()));
+        }
+        return builder.body(response);
+    }
+
+    @PostMapping("/api/v1/mfa/transfer-challenges/{challengeId}/verifications")
+    @Operation(summary = "Verify a transfer-bound MFA challenge")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Transfer-bound challenge verified",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ChallengeResponse.class)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "Transfer binding does not match the challenge",
+            content =
+                    @Content(
+                            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class)))
+    ResponseEntity<ChallengeResponse> verifyTransferChallenge(
+            Authentication authentication,
+            @PathVariable String challengeId,
+            @Valid @RequestBody VerifyTransferChallengeRequest request) {
+        var subjectId = authenticatedSubject(authentication);
+        var result = challengeService.verifyTransferChallenge(
+                new ChallengeId(challengeId), subjectId, request.transferId(), request.decisionId(), request.code());
+        return ResponseEntity.ok(mapChallengeVerificationResult(result));
+    }
+
     private static String authenticatedSubject(Authentication authentication) {
         if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
             throw MfaProblemException.accessDenied(
@@ -609,7 +684,25 @@ class MfaController {
             case ENROLLMENT_NOT_ACTIVE ->
                 throw MfaProblemException.enrollmentNotActive(
                         "The MFA enrollment must be active before a challenge can be created.");
+            case BINDING_MISMATCH ->
+                throw MfaProblemException.challengeBindingMismatch(
+                        "The transfer binding does not match the existing MFA challenge.");
             default -> throw new IllegalStateException("Unexpected challenge outcome for creation");
+        };
+    }
+
+    private static ChallengeResponse mapTransferChallengeResult(ChallengeResult result) {
+        return switch (result.status()) {
+            case CREATED -> ChallengeResponse.from(result);
+            case ENROLLMENT_NOT_FOUND ->
+                throw MfaProblemException.notFound("The requested MFA enrollment does not exist.");
+            case ENROLLMENT_NOT_ACTIVE ->
+                throw MfaProblemException.enrollmentNotActive(
+                        "The MFA enrollment must be active before a challenge can be created.");
+            case BINDING_MISMATCH ->
+                throw MfaProblemException.challengeBindingMismatch(
+                        "The transfer binding does not match the existing MFA challenge.");
+            default -> throw new IllegalStateException("Unexpected transfer challenge outcome");
         };
     }
 
@@ -631,6 +724,9 @@ class MfaController {
                 throw MfaProblemException.notFound("The MFA enrollment linked to this challenge does not exist.");
             case CREATED, ENROLLMENT_NOT_ACTIVE ->
                 throw new IllegalStateException("Unexpected challenge outcome for verification");
+            case BINDING_MISMATCH ->
+                throw MfaProblemException.challengeBindingMismatch(
+                        "The transfer binding does not match the existing MFA challenge.");
         };
     }
 }

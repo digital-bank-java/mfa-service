@@ -9,4 +9,8 @@ public interface ChallengeStore {
     void save(Challenge challenge);
 
     Optional<Challenge> find(ChallengeId challengeId);
+
+    default Optional<Challenge> findByDecisionId(String decisionId) {
+        return Optional.empty();
+    }
 }
