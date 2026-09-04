@@ -78,6 +78,7 @@ jobs:
         run: |
           cleanup() {
             docker rm --force mfa-service-ci > /dev/null 2>&1 || true
+            docker rm --force postgres-mfa-service-ci > /dev/null 2>&1 || true
             if [[ -n "${mock_server_pid:-}" ]]; then
               kill "${mock_server_pid}" > /dev/null 2>&1 || true
             fi
@@ -138,6 +139,32 @@ jobs:
           done
 
           docker run --detach \
+            --name postgres-mfa-service-ci \
+            --env POSTGRES_USER=mfa_ci \
+            --env POSTGRES_PASSWORD=mfa_ci_password \
+            --env POSTGRES_DB=postgres \
+            --publish 5432:5432 \
+            postgres:16-alpine
+
+          postgres_ready=false
+          for attempt in {1..30}; do
+            if docker exec postgres-mfa-service-ci \
+              pg_isready --username=mfa_ci --dbname=postgres > /dev/null 2>&1; then
+              postgres_ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "${postgres_ready}" != "true" ]]; then
+            docker logs postgres-mfa-service-ci
+            exit 1
+          fi
+
+          docker exec postgres-mfa-service-ci \
+            psql --username=mfa_ci --dbname=postgres --command='create database mfa_service;'
+
+          docker run --detach \
             --name mfa-service-ci \
             --read-only \
             --tmpfs /tmp:rw,size=64m \
@@ -145,6 +172,10 @@ jobs:
             --add-host host.docker.internal:host-gateway \
             --env CONFIG_SERVER_URL=http://host.docker.internal:8888 \
             --env SPRING_PROFILES_ACTIVE=sit \
+            --env MFA_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5432/mfa_service \
+            --env DB_USERNAME=mfa_ci \
+            --env DB_PASSWORD=mfa_ci_password \
+            --env MFA_TOTP_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
             digital-bank-java/mfa-service:ci
 
           ready=false

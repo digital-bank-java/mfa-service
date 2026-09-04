@@ -37,6 +37,23 @@ spec:
               value: {{ .Values.runtime.profile | quote }}
             - name: SERVER_PORT
               value: {{ .Values.service.port | quote }}
+            - name: MFA_DATASOURCE_URL
+              value: {{ .Values.database.url | quote }}
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.secretName | quote }}
+                  key: {{ .Values.database.usernameKey | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.secretName | quote }}
+                  key: {{ .Values.database.passwordKey | quote }}
+            - name: MFA_TOTP_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.totp.encryptionKeySecretName | quote }}
+                  key: {{ .Values.totp.encryptionKeySecretKey | quote }}
             {{- if .Values.auth.enabled }}
             - name: AUTH_JWT_SECRET
               valueFrom:

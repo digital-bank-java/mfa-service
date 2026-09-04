@@ -1,6 +1,8 @@
 package com.digitalbank.mfaservice.mfa.domain;
 
 import java.time.Instant;
+import java.util.Objects;
+import java.util.function.Function;
 
 public final class TotpCredential {
 
@@ -19,6 +21,10 @@ public final class TotpCredential {
 
     boolean verify(TotpCodeVerifier verifier, String code, Instant at) {
         return verifier.verify(secret, code, at);
+    }
+
+    <T> T mapSecret(Function<String, T> operation) {
+        return Objects.requireNonNull(operation, "operation").apply(secret);
     }
 
     @Override

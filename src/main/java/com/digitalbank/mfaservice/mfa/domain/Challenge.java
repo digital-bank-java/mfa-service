@@ -19,7 +19,13 @@ public final class Challenge {
     private ChallengeStatus status;
 
     private Challenge(
-            ChallengeId id, EnrollmentId enrollmentId, Instant createdAt, Instant expiresAt, int maxAttempts) {
+            ChallengeId id,
+            EnrollmentId enrollmentId,
+            Instant createdAt,
+            Instant expiresAt,
+            int maxAttempts,
+            int failedAttempts,
+            ChallengeStatus status) {
         this.id = Objects.requireNonNull(id, "id");
         this.enrollmentId = Objects.requireNonNull(enrollmentId, "enrollmentId");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
@@ -33,13 +39,28 @@ public final class Challenge {
         if (maxAttempts < 1 || maxAttempts > 10) {
             throw new IllegalArgumentException("Challenge attempts must be between 1 and 10");
         }
+        if (failedAttempts < 0 || failedAttempts > maxAttempts) {
+            throw new IllegalArgumentException("Challenge failed attempts must be between 0 and the attempt limit");
+        }
         this.maxAttempts = maxAttempts;
-        this.status = ChallengeStatus.OPEN;
+        this.failedAttempts = failedAttempts;
+        this.status = Objects.requireNonNull(status, "status");
     }
 
     public static Challenge open(
             ChallengeId id, EnrollmentId enrollmentId, Instant createdAt, Instant expiresAt, int maxAttempts) {
-        return new Challenge(id, enrollmentId, createdAt, expiresAt, maxAttempts);
+        return new Challenge(id, enrollmentId, createdAt, expiresAt, maxAttempts, 0, ChallengeStatus.OPEN);
+    }
+
+    public static Challenge restore(
+            ChallengeId id,
+            EnrollmentId enrollmentId,
+            Instant createdAt,
+            Instant expiresAt,
+            int maxAttempts,
+            int failedAttempts,
+            ChallengeStatus status) {
+        return new Challenge(id, enrollmentId, createdAt, expiresAt, maxAttempts, failedAttempts, status);
     }
 
     public ChallengeId id() {
@@ -64,6 +85,14 @@ public final class Challenge {
 
     public synchronized int remainingAttempts() {
         return maxAttempts - failedAttempts;
+    }
+
+    public int maxAttempts() {
+        return maxAttempts;
+    }
+
+    public synchronized int failedAttempts() {
+        return failedAttempts;
     }
 
     public synchronized ChallengeVerification verify(

@@ -2,16 +2,18 @@
 
 ## Purpose
 
-`mfa-service` is the foundation for multi-factor authentication workflows and provider integration boundaries. It contains transport-neutral TOTP enrollment and bounded challenge application services with in-memory adapters plus the HTTP input adapter for enrollment and challenge verification.
+`mfa-service` is the foundation for multi-factor authentication workflows and provider integration boundaries. It contains transport-neutral TOTP enrollment and bounded challenge application services with PostgreSQL-backed adapters plus the HTTP input adapter for enrollment and challenge verification.
 
 ## Current Boundaries
 
 - Owns service bootstrap, Config Client, health probes, OpenAPI metadata, packaging, and deployment.
 - Owns TOTP enrollment activation, challenge state transitions, and the HTTP input adapter that exposes those workflows.
-- In-memory stores are foundation adapters only; do not treat them as durable production persistence.
+- PostgreSQL stores are the runtime adapters. The in-memory stores remain test-only foundation adapters and must not be wired into deployed profiles.
+- Flyway owns the `mfa_enrollments` and `mfa_challenges` schema. Application verification runs inside database transactions and the stores lock rows before state transitions.
 - TOTP secrets are write-only at the application result boundary and must not be logged, returned, or added to tests as output assertions.
+- TOTP secrets are encrypted with AES-GCM before persistence. The 32-byte base64 encryption key is supplied by an external runtime secret and must never be committed.
 - Challenge verification must fail at `now >= expiresAt`, enforce the attempt limit, and reject replay after consumption.
-- Does not own customer identity data, login orchestration, recovery codes, Kafka behavior, durable persistence, or authorization decisions.
+- Does not own customer identity data, login orchestration, recovery codes, Kafka behavior, or authorization decisions.
 - Public MFA routes require a supporting issue, boundary DTO validation, and documented Problem Details mapping.
 
 ## Commands
@@ -30,11 +32,12 @@ helm lint helm --strict --values helm/values-sit.yaml
 - SIT namespace: `digital-bank-sit`.
 - Runtime profiles: `sit`, `uat`, and `prod`; `local` is retired.
 - Runtime configuration is externalized through Config Server and `config-repo`.
+- Runtime persistence requires PostgreSQL datasource settings and `MFA_TOTP_ENCRYPTION_KEY`; missing encryption-key configuration must fail startup rather than fall back to plaintext.
 - Foundation defaults are `mfa.challenge.ttl=PT5M` and `mfa.challenge.max-attempts=5`.
 
 ## Testing
 
-Use unit tests for isolated application/domain behavior and inject fixed clocks, ids, and TOTP fakes for deterministic lifecycle coverage. Use integration tests for HTTP and infrastructure-backed behavior when those adapters exist. Keep `./mvnw verify` green before merge.
+Use unit tests for isolated application/domain behavior and inject fixed clocks, ids, and TOTP fakes for deterministic lifecycle coverage. Use the database-backed integration test for Flyway/schema and encrypted persistence coverage. Keep `./mvnw verify` green before merge.
 
 ## Architecture
 
