@@ -3,6 +3,7 @@ package com.digitalbank.mfaservice.mfa.application;
 import com.digitalbank.mfaservice.mfa.application.port.ChallengeStore;
 import com.digitalbank.mfaservice.mfa.application.port.EnrollmentStore;
 import com.digitalbank.mfaservice.mfa.application.port.MfaIdentifierGenerator;
+import com.digitalbank.mfaservice.mfa.application.port.MfaTransactionRunner;
 import com.digitalbank.mfaservice.mfa.application.port.TotpProvider;
 import com.digitalbank.mfaservice.mfa.domain.Challenge;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeId;
@@ -24,6 +25,7 @@ public final class MfaChallengeService {
     private final Clock clock;
     private final Duration challengeTtl;
     private final int maxAttempts;
+    private final MfaTransactionRunner transactionRunner;
 
     public MfaChallengeService(
             EnrollmentStore enrollmentStore,
@@ -33,6 +35,26 @@ public final class MfaChallengeService {
             Clock clock,
             Duration challengeTtl,
             int maxAttempts) {
+        this(
+                enrollmentStore,
+                challengeStore,
+                totpProvider,
+                identifierGenerator,
+                clock,
+                challengeTtl,
+                maxAttempts,
+                MfaTransactionRunner.direct());
+    }
+
+    public MfaChallengeService(
+            EnrollmentStore enrollmentStore,
+            ChallengeStore challengeStore,
+            TotpProvider totpProvider,
+            MfaIdentifierGenerator identifierGenerator,
+            Clock clock,
+            Duration challengeTtl,
+            int maxAttempts,
+            MfaTransactionRunner transactionRunner) {
         this.enrollmentStore = Objects.requireNonNull(enrollmentStore, "enrollmentStore");
         this.challengeStore = Objects.requireNonNull(challengeStore, "challengeStore");
         this.totpProvider = Objects.requireNonNull(totpProvider, "totpProvider");
@@ -49,50 +71,57 @@ public final class MfaChallengeService {
             throw new IllegalArgumentException("Challenge attempts must be between 1 and 10");
         }
         this.maxAttempts = maxAttempts;
+        this.transactionRunner = Objects.requireNonNull(transactionRunner, "transactionRunner");
     }
 
     public ChallengeResult create(EnrollmentId enrollmentId, String subjectId) {
-        var enrollment = enrollmentStore.find(enrollmentId);
-        if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
-            return new ChallengeResult(ChallengeOutcome.ENROLLMENT_NOT_FOUND, null, null, null, 0);
-        }
-        if (enrollment.orElseThrow().status() != EnrollmentStatus.ACTIVE) {
-            return result(ChallengeOutcome.ENROLLMENT_NOT_ACTIVE, null);
-        }
-        var createdAt = clock.instant();
-        var challenge = Challenge.open(
-                identifierGenerator.newChallengeId(),
-                enrollmentId,
-                createdAt,
-                createdAt.plus(challengeTtl),
-                maxAttempts);
-        challengeStore.save(challenge);
-        return new ChallengeResult(
-                ChallengeOutcome.CREATED,
-                challenge.id(),
-                challenge.status(),
-                challenge.expiresAt(),
-                challenge.remainingAttempts());
+        return transactionRunner.execute(() -> {
+            var enrollment = enrollmentStore.find(enrollmentId);
+            if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
+                return new ChallengeResult(ChallengeOutcome.ENROLLMENT_NOT_FOUND, null, null, null, 0);
+            }
+            if (enrollment.orElseThrow().status() != EnrollmentStatus.ACTIVE) {
+                return result(ChallengeOutcome.ENROLLMENT_NOT_ACTIVE, null);
+            }
+            var createdAt = clock.instant();
+            var challenge = Challenge.open(
+                    identifierGenerator.newChallengeId(),
+                    enrollmentId,
+                    createdAt,
+                    createdAt.plus(challengeTtl),
+                    maxAttempts);
+            challengeStore.save(challenge);
+            return new ChallengeResult(
+                    ChallengeOutcome.CREATED,
+                    challenge.id(),
+                    challenge.status(),
+                    challenge.expiresAt(),
+                    challenge.remainingAttempts());
+        });
     }
 
     public ChallengeResult verify(ChallengeId challengeId, String subjectId, String code) {
-        var challenge = challengeStore.find(challengeId);
-        if (challenge.isEmpty()) {
-            return result(ChallengeOutcome.NOT_FOUND, challengeId);
-        }
-        var record = challenge.orElseThrow();
-        var enrollment = enrollmentStore.find(record.enrollmentId());
-        if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
-            return result(ChallengeOutcome.NOT_FOUND, challengeId);
-        }
-        if (record.status() != ChallengeStatus.OPEN || !clock.instant().isBefore(record.expiresAt())) {
-            var verification = record.verify(clock::instant, ignored -> false);
+        return transactionRunner.execute(() -> {
+            var challenge = challengeStore.find(challengeId);
+            if (challenge.isEmpty()) {
+                return result(ChallengeOutcome.NOT_FOUND, challengeId);
+            }
+            var record = challenge.orElseThrow();
+            var enrollment = enrollmentStore.find(record.enrollmentId());
+            if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
+                return result(ChallengeOutcome.NOT_FOUND, challengeId);
+            }
+            if (record.status() != ChallengeStatus.OPEN || !clock.instant().isBefore(record.expiresAt())) {
+                var verification = record.verify(clock::instant, ignored -> false);
+                challengeStore.save(record);
+                return result(record, verification);
+            }
+            var verification = record.verify(
+                    clock::instant,
+                    verificationAt -> enrollment.orElseThrow().verifyActive(totpProvider, code, verificationAt));
+            challengeStore.save(record);
             return result(record, verification);
-        }
-        var verification = record.verify(
-                clock::instant,
-                verificationAt -> enrollment.orElseThrow().verifyActive(totpProvider, code, verificationAt));
-        return result(record, verification);
+        });
     }
 
     private ChallengeResult result(ChallengeOutcome outcome, ChallengeId challengeId) {

@@ -9,8 +9,9 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 - Actuator health, liveness, and readiness probes.
 - Explicit OpenAPI metadata at `/v3/api-docs`; service-local Swagger UI is disabled.
 - Internal MFA HTTP routes protected by a JWT bearer-token resource-server boundary.
-- TOTP enrollment and activation application ports backed by an in-memory credential adapter.
+- TOTP enrollment and activation application ports backed by encrypted PostgreSQL persistence.
 - MFA challenge creation and verification with expiry, bounded attempts, and replay-safe terminal states.
+- Flyway-managed PostgreSQL schema with transaction-locked enrollment and challenge state transitions.
 - HTTP APIs for MFA enrollment creation, enrollment verification, challenge creation, and challenge verification.
 - Standard `dev.samstevens.totp:totp:1.7.1` adapter for TOTP generation and verification.
 - Non-root container image and hardened Helm deployment.
@@ -18,7 +19,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 
 ## Boundaries
 
-This service will later own MFA policy and provider integration boundaries. The current implementation does not own customer identity data, login orchestration, recovery codes, Kafka behavior, durable persistence, or API Gateway routing. It does enforce the MFA endpoint scope and resource ownership authorization described below.
+This service owns MFA provider state persistence and policy boundaries. It does not own customer identity data, login orchestration, recovery codes, Kafka behavior, or API Gateway routing. It does enforce the MFA endpoint scope and resource ownership authorization described below.
 
 TOTP enrollment and challenge responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. The generated secret is held only inside the credential store and is never returned in HTTP responses, application results, or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
 
@@ -28,7 +29,7 @@ Enrollment verification is an atomic one-time transition: a valid code changes `
 
 The application services accept `java.time.Clock` and identifier-generator ports so unit tests can use fixed time and deterministic ids. See [Problem Details guidance](docs/problem-details.md) for the HTTP failure contract. This repository does not currently maintain a service-local Insomnia collection.
 
-MFA provider integrations must remain behind outbound ports and adapters when that work is approved and tracked. Never commit enrollment secrets, recovery codes, tokens, or production credentials to this repository.
+MFA provider integrations must remain behind outbound ports and adapters when that work is approved and tracked. TOTP secrets are encrypted with AES-GCM before they enter PostgreSQL. Never commit enrollment secrets, recovery codes, tokens, encryption keys, or production credentials to this repository.
 
 ## Runtime Configuration
 
@@ -39,6 +40,9 @@ Config Server supplies the effective runtime configuration. The service reposito
 | `CONFIG_SERVER_URL` | Config Server base URL | `http://localhost:8888` |
 | `SPRING_PROFILES_ACTIVE` | Runtime environment profile | Spring `default` profile |
 | `SERVER_PORT` | Workstation/container HTTP port | `8087` |
+| `MFA_DATASOURCE_URL` | PostgreSQL JDBC URL; Config Server or Helm supplies the effective value | `jdbc:postgresql://postgres:5432/mfa_service` |
+| `DB_USERNAME` / `DB_PASSWORD` | PostgreSQL credentials referenced by Config Server and Helm | none |
+| `MFA_TOTP_ENCRYPTION_KEY` | Base64 encoding of a 32-byte AES key used to protect TOTP secrets at rest | required |
 
 MFA foundation defaults:
 
@@ -53,6 +57,7 @@ Internal endpoint authentication depends on standard Spring Security resource-se
 | --- | --- | --- |
 | `spring.security.oauth2.resourceserver.jwt.issuer-uri` | JWT issuer for internal service authentication | none |
 | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` | JWK set endpoint for internal service authentication | none |
+| `mfa.totp.encryption-key` | AES-GCM key material; bind from `MFA_TOTP_ENCRYPTION_KEY` and keep outside Git | required |
 
 `spring.security.oauth2.resourceserver.jwt.issuer-uri` is the required trust anchor for MFA endpoint authentication. When `jwk-set-uri` is configured, the decoder still validates the token issuer against `issuer-uri`; JWK material alone is not treated as sufficient trust configuration.
 
@@ -110,6 +115,19 @@ Error responses use `application/problem+json`. Authentication failures return `
 This repository does not invent or transport TOTP provisioning secrets over HTTP. MFA enrollment remains usable only once the platform-owned authenticator provisioning path is integrated. Until then, the HTTP adapter exposes the approved internal enrollment and challenge contract without secret-bearing response fields.
 
 Before deploying to SIT, the Config Server's backing `config-repo` should contain the `mfa-service` defaults and SIT override from config-repo PR [#32](https://github.com/digital-bank-java/config-repo/pull/32). Without those service-specific files, Config Server can still return shared configuration and the service can start with its local port default, but the intended `mfa-service` metadata is absent. The mandatory Config Client import still fails startup when Config Server itself is unavailable.
+
+SIT also requires a PostgreSQL database named `mfa_service` and an externally managed Kubernetes Secret named `mfa-service-secrets` with key `MFA_TOTP_ENCRYPTION_KEY`. Generate a development-only key outside Git, for example:
+
+```bash
+kubectl create secret generic mfa-service-secrets \
+  --namespace digital-bank-sit \
+  --from-literal=MFA_TOTP_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  --dry-run=client --output=yaml | kubectl apply -f -
+```
+
+The Helm chart reads PostgreSQL credentials from the existing `postgres` Secret and reads only the encryption key from `mfa-service-secrets`. Do not reuse a production key in SIT, and do not put either secret value in Helm values, Config Server Git, logs, or test assertions. Flyway creates the MFA tables on service startup; existing rows remain encrypted and are not rewritten by migration.
+
+Persistence details, row-locking behavior, and the key boundary are documented in [MFA persistence](docs/mfa-persistence.md).
 
 ## Prerequisites
 
@@ -230,4 +248,4 @@ All changes require review by the CODEOWNERS maintainer. Never commit credential
 
 ## Follow-Up Integration
 
-Auth-service orchestration, step-up policy, durable secret and challenge storage, external provider adapters, recovery codes, API Gateway routes, and any future shared API client collections remain follow-up work linked to organization issues [#49](https://github.com/digital-bank-java/.github/issues/49), [#50](https://github.com/digital-bank-java/.github/issues/50), and [#51](https://github.com/digital-bank-java/.github/issues/51). The bootstrap PR [#1](https://github.com/digital-bank-java/mfa-service/pull/1) remains the required runtime/build dependency for this foundation.
+Auth-service orchestration, step-up policy, external provider adapters, recovery codes, API Gateway routes, and any future shared API client collections remain follow-up work linked to organization issues [#49](https://github.com/digital-bank-java/.github/issues/49), [#50](https://github.com/digital-bank-java/.github/issues/50), and [#51](https://github.com/digital-bank-java/.github/issues/51). The bootstrap PR [#1](https://github.com/digital-bank-java/mfa-service/pull/1) remains the required runtime/build dependency for this foundation.

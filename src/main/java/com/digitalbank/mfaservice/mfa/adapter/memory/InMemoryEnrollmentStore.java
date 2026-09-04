@@ -13,7 +13,7 @@ public final class InMemoryEnrollmentStore implements EnrollmentStore {
     @Override
     public void save(Enrollment enrollment) {
         var previous = enrollments.putIfAbsent(enrollment.id(), enrollment);
-        if (previous != null) {
+        if (previous != null && previous != enrollment) {
             throw new IllegalStateException("Enrollment id already exists");
         }
     }
