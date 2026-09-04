@@ -11,6 +11,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 - Internal MFA HTTP routes protected by a JWT bearer-token resource-server boundary.
 - TOTP enrollment and activation application ports backed by encrypted PostgreSQL persistence.
 - MFA challenge creation and verification with expiry, bounded attempts, and replay-safe terminal states.
+- Transfer-bound MFA challenges that retain the risk decision and immutable transfer intent through verification.
 - Flyway-managed PostgreSQL schema with transaction-locked enrollment and challenge state transitions.
 - HTTP APIs for MFA enrollment creation, enrollment verification, challenge creation, and challenge verification.
 - Standard `dev.samstevens.totp:totp:1.7.1` adapter for TOTP generation and verification.
@@ -21,7 +22,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 
 This service owns MFA provider state persistence and policy boundaries. It does not own customer identity data, login orchestration, recovery codes, Kafka behavior, or API Gateway routing. It does enforce the MFA endpoint scope and resource ownership authorization described below.
 
-TOTP enrollment and challenge responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. The generated secret is held only inside the credential store and is never returned in HTTP responses, application results, or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
+TOTP enrollment and challenge responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. The generated secret is held only inside the credential store and is never returned in HTTP responses, application results, or aggregate `toString` output. Transfer-bound challenge responses additionally expose non-secret transfer and decision correlation identifiers, never the authenticated subject or TOTP material.
 
 Challenge verification is fail-closed at `now >= expiresAt`. Wrong codes consume one attempt, the final failed attempt moves the challenge to `EXHAUSTED`, a valid code moves it to `CONSUMED`, and later verification of a consumed challenge returns a replay outcome without calling the TOTP provider again. The default challenge TTL is `PT5M`, the maximum challenge TTL is `PT15M`, and the default maximum is `5` attempts; both settings are configurable through `mfa.challenge.ttl` and `mfa.challenge.max-attempts` and remain subject to their security bounds.
 
@@ -73,6 +74,8 @@ The service exposes these routes directly on `mfa-service`:
 | `POST` | `/api/v1/mfa/enrollments/{enrollmentId}/verifications` | Verify a pending enrollment with a 6-digit TOTP code and activate it. |
 | `POST` | `/api/v1/mfa/challenges` | Create an MFA challenge for an active enrollment. |
 | `POST` | `/api/v1/mfa/challenges/{challengeId}/verifications` | Verify an MFA challenge with a 6-digit TOTP code. |
+| `POST` | `/api/v1/mfa/transfer-challenges` | Create an MFA challenge bound to one transfer risk decision and immutable transfer intent. |
+| `POST` | `/api/v1/mfa/transfer-challenges/{challengeId}/verifications` | Verify a transfer-bound challenge; transfer and decision identifiers must match the original binding. |
 
 All `/api/v1/mfa/**` routes require an internal bearer JWT. Success responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. Raw TOTP secrets, provisioning URIs, and submitted codes are never returned.
 
@@ -106,9 +109,33 @@ curl --request POST http://localhost:8087/api/v1/mfa/challenges/<challenge-id>/v
   --data '{
     "code": "123456"
   }'
+
+curl --request POST http://localhost:8087/api/v1/mfa/transfer-challenges \
+  --header 'Authorization: Bearer <internal-jwt>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "enrollmentId": "<enrollment-id>",
+    "transferId": "<transfer-id>",
+    "decisionId": "<risk-decision-id>",
+    "sourceAccountId": "<source-account-id>",
+    "destinationAccountId": "<destination-account-id>",
+    "amount": "1250.75",
+    "currency": "USD",
+    "policyVersion": "transfer-risk-policy-2026-09",
+    "correlationId": "<transfer-id>"
+  }'
+
+curl --request POST http://localhost:8087/api/v1/mfa/transfer-challenges/<challenge-id>/verifications \
+  --header 'Authorization: Bearer <internal-jwt>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "transferId": "<transfer-id>",
+    "decisionId": "<risk-decision-id>",
+    "code": "123456"
+  }'
 ```
 
-Error responses use `application/problem+json`. Authentication failures return `401` with `urn:digital-bank:mfa:authentication-required`, authorization failures return `403` with `urn:digital-bank:mfa:access-denied`, validation failures return `400`, unknown resources return `404`, enrollment state conflicts return `409`, and invalid or expired challenge verification outcomes return `401`.
+Error responses use `application/problem+json`. Authentication failures return `401` with `urn:digital-bank:mfa:authentication-required`, authorization failures return `403` with `urn:digital-bank:mfa:access-denied`, validation failures return `400`, unknown resources return `404`, enrollment or transfer-binding conflicts return `409`, and invalid or expired challenge verification outcomes return `401`. A transfer-bound challenge is single-use and cannot be verified for another transfer or decision.
 
 `/v3/api-docs` remains available for internal machine-readable contract publication. Service-local Swagger UI is disabled; the platform-owned interactive documentation surface belongs at the API Gateway.
 

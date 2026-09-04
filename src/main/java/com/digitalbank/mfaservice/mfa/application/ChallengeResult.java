@@ -10,7 +10,18 @@ public record ChallengeResult(
         ChallengeId challengeId,
         ChallengeStatus challengeStatus,
         Instant expiresAt,
-        int remainingAttempts) {
+        int remainingAttempts,
+        boolean replayed,
+        com.digitalbank.mfaservice.mfa.domain.TransferChallengeBinding transferBinding) {
+
+    public ChallengeResult(
+            ChallengeOutcome status,
+            ChallengeId challengeId,
+            ChallengeStatus challengeStatus,
+            Instant expiresAt,
+            int remainingAttempts) {
+        this(status, challengeId, challengeStatus, expiresAt, remainingAttempts, false, null);
+    }
 
     public ChallengeResult {
         Objects.requireNonNull(status, "status");

@@ -100,6 +100,15 @@ final class MfaProblemException extends RuntimeException {
                 Map.of());
     }
 
+    static MfaProblemException challengeBindingMismatch(String detail) {
+        return new MfaProblemException(
+                HttpStatus.CONFLICT,
+                URI.create("urn:digital-bank:mfa:challenge-binding-mismatch"),
+                "MFA challenge binding mismatch",
+                detail,
+                Map.of());
+    }
+
     HttpStatus status() {
         return status;
     }
