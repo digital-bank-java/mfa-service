@@ -12,6 +12,14 @@ runtime:
   profile: default
   configServerUrl: http://config-server:8888
 
+kafka:
+  bootstrapServers: localhost:9092
+
+assurancePublisher:
+  enabled: false
+  batchSize: 100
+  pollIntervalMs: 5000
+
 database:
   url: jdbc:postgresql://postgres:5432/mfa_service
   secretName: postgres

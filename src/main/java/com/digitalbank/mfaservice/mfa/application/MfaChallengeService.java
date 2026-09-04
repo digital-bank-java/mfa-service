@@ -12,6 +12,7 @@ import com.digitalbank.mfaservice.mfa.domain.ChallengeVerification;
 import com.digitalbank.mfaservice.mfa.domain.ChallengeVerificationStatus;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentStatus;
+import com.digitalbank.mfaservice.mfa.domain.TransferChallengeBinding;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
@@ -26,6 +27,7 @@ public final class MfaChallengeService {
     private final Duration challengeTtl;
     private final int maxAttempts;
     private final MfaTransactionRunner transactionRunner;
+    private final MfaAssuranceOutboxStore assuranceOutbox;
 
     public MfaChallengeService(
             EnrollmentStore enrollmentStore,
@@ -43,7 +45,8 @@ public final class MfaChallengeService {
                 clock,
                 challengeTtl,
                 maxAttempts,
-                MfaTransactionRunner.direct());
+                MfaTransactionRunner.direct(),
+                MfaAssuranceOutboxStore.noop());
     }
 
     public MfaChallengeService(
@@ -55,6 +58,28 @@ public final class MfaChallengeService {
             Duration challengeTtl,
             int maxAttempts,
             MfaTransactionRunner transactionRunner) {
+        this(
+                enrollmentStore,
+                challengeStore,
+                totpProvider,
+                identifierGenerator,
+                clock,
+                challengeTtl,
+                maxAttempts,
+                transactionRunner,
+                MfaAssuranceOutboxStore.noop());
+    }
+
+    public MfaChallengeService(
+            EnrollmentStore enrollmentStore,
+            ChallengeStore challengeStore,
+            TotpProvider totpProvider,
+            MfaIdentifierGenerator identifierGenerator,
+            Clock clock,
+            Duration challengeTtl,
+            int maxAttempts,
+            MfaTransactionRunner transactionRunner,
+            MfaAssuranceOutboxStore assuranceOutbox) {
         this.enrollmentStore = Objects.requireNonNull(enrollmentStore, "enrollmentStore");
         this.challengeStore = Objects.requireNonNull(challengeStore, "challengeStore");
         this.totpProvider = Objects.requireNonNull(totpProvider, "totpProvider");
@@ -72,6 +97,7 @@ public final class MfaChallengeService {
         }
         this.maxAttempts = maxAttempts;
         this.transactionRunner = Objects.requireNonNull(transactionRunner, "transactionRunner");
+        this.assuranceOutbox = Objects.requireNonNull(assuranceOutbox, "assuranceOutbox");
     }
 
     public ChallengeResult create(EnrollmentId enrollmentId, String subjectId) {
@@ -107,6 +133,9 @@ public final class MfaChallengeService {
                 return result(ChallengeOutcome.NOT_FOUND, challengeId);
             }
             var record = challenge.orElseThrow();
+            if (record.transferBinding() != null) {
+                return result(ChallengeOutcome.BINDING_MISMATCH, record, false);
+            }
             var enrollment = enrollmentStore.find(record.enrollmentId());
             if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
                 return result(ChallengeOutcome.NOT_FOUND, challengeId);
@@ -120,6 +149,78 @@ public final class MfaChallengeService {
                     clock::instant,
                     verificationAt -> enrollment.orElseThrow().verifyActive(totpProvider, code, verificationAt));
             challengeStore.save(record);
+            return result(record, verification);
+        });
+    }
+
+    public ChallengeResult createTransferChallenge(
+            EnrollmentId enrollmentId, String subjectId, TransferChallengeBinding binding) {
+        if (!subjectId.equals(binding.customerId())) {
+            return new ChallengeResult(ChallengeOutcome.BINDING_MISMATCH, null, null, null, 0);
+        }
+        return transactionRunner.execute(() -> {
+            var enrollment = enrollmentStore.find(enrollmentId);
+            if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
+                return new ChallengeResult(ChallengeOutcome.ENROLLMENT_NOT_FOUND, null, null, null, 0);
+            }
+            if (enrollment.orElseThrow().status() != EnrollmentStatus.ACTIVE) {
+                return result(ChallengeOutcome.ENROLLMENT_NOT_ACTIVE, null);
+            }
+            var existing = challengeStore.findByDecisionId(binding.decisionId());
+            if (existing.isPresent()) {
+                var challenge = existing.orElseThrow();
+                if (!binding.equals(challenge.transferBinding())
+                        || !challenge.enrollmentId().equals(enrollmentId)) {
+                    return result(ChallengeOutcome.BINDING_MISMATCH, challenge, false);
+                }
+                return result(challenge, true);
+            }
+            var createdAt = clock.instant();
+            var challenge = Challenge.open(
+                    identifierGenerator.newChallengeId(),
+                    enrollmentId,
+                    createdAt,
+                    createdAt.plus(challengeTtl),
+                    maxAttempts,
+                    binding);
+            challengeStore.save(challenge);
+            return result(challenge, false);
+        });
+    }
+
+    public ChallengeResult verifyTransferChallenge(
+            ChallengeId challengeId, String subjectId, String transferId, String decisionId, String code) {
+        return transactionRunner.execute(() -> {
+            var challenge = challengeStore.find(challengeId);
+            if (challenge.isEmpty()) {
+                return result(ChallengeOutcome.NOT_FOUND, challengeId);
+            }
+            var record = challenge.orElseThrow();
+            var binding = record.transferBinding();
+            if (binding == null
+                    || !binding.customerId().equals(subjectId)
+                    || !binding.transferId().equals(transferId)
+                    || !binding.decisionId().equals(decisionId)) {
+                return result(ChallengeOutcome.BINDING_MISMATCH, record, false);
+            }
+            var enrollment = enrollmentStore.find(record.enrollmentId());
+            if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
+                return result(ChallengeOutcome.NOT_FOUND, challengeId);
+            }
+            var verification = record.verify(
+                    clock::instant,
+                    verificationAt -> enrollment.orElseThrow().verifyActive(totpProvider, code, verificationAt));
+            challengeStore.save(record);
+            if (verification.status() == ChallengeVerificationStatus.VERIFIED) {
+                var verifiedAt = Objects.requireNonNull(verification.verifiedAt(), "verifiedAt");
+                assuranceOutbox.append(MfaAssuranceGrantedEvent.from(
+                        identifierGenerator.newEventId(),
+                        "mfa-service",
+                        verifiedAt,
+                        record.expiresAt(),
+                        record.id().value(),
+                        binding));
+            }
             return result(record, verification);
         });
     }
@@ -145,7 +246,31 @@ public final class MfaChallengeService {
                 record.id(),
                 verification.challengeStatus(),
                 record.expiresAt(),
-                verification.remainingAttempts());
+                verification.remainingAttempts(),
+                false,
+                record.transferBinding());
+    }
+
+    private ChallengeResult result(Challenge record, boolean replayed) {
+        return new ChallengeResult(
+                ChallengeOutcome.CREATED,
+                record.id(),
+                record.status(),
+                record.expiresAt(),
+                record.remainingAttempts(),
+                replayed,
+                record.transferBinding());
+    }
+
+    private ChallengeResult result(ChallengeOutcome outcome, Challenge record, boolean replayed) {
+        return new ChallengeResult(
+                outcome,
+                record.id(),
+                record.status(),
+                record.expiresAt(),
+                record.remainingAttempts(),
+                replayed,
+                record.transferBinding());
     }
 
     private static ChallengeOutcome mapOutcome(ChallengeVerificationStatus status) {

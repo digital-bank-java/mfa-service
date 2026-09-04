@@ -32,9 +32,10 @@ The service uses `application/problem+json` and this shape for expected MFA fail
 | `REPLAYED` | `401` | `urn:digital-bank:mfa:challenge-replayed` | A consumed challenge was presented again. |
 | `ENROLLMENT_NOT_ACTIVE` | `409` | `urn:digital-bank:mfa:enrollment-not-active` | Challenge creation was attempted before enrollment activation. |
 | `ALREADY_ACTIVE` | `409` | `urn:digital-bank:mfa:enrollment-already-active` | Enrollment activation was attempted after activation. |
+| `BINDING_MISMATCH` | `409` | `urn:digital-bank:mfa:challenge-binding-mismatch` | A transfer challenge was presented with a different transfer, decision, or subject binding. |
 
 Enrollment and challenge success responses never return TOTP secrets or authenticator provisioning material. Invalid-code and exhausted challenge responses may include `remainingAttempts` only when that metadata is available from the challenge workflow.
 
 ## Transport Ownership
 
-The HTTP adapter now requires bearer JWT authentication on `/api/v1/mfa/**` through Spring Security's resource-server support. `spring.security.oauth2.resourceserver.jwt.issuer-uri` is required for the platform-owned trust configuration, and `jwk-set-uri` remains optional supplemental key material. The application validates the JWT issuer even when `jwk-set-uri` is configured explicitly. Rate limits, gateway routes, authenticator provisioning UX, and auth-service orchestration remain later integration work. The application/domain foundation remains usable without Spring MVC or an HTTP request context.
+The HTTP adapter now requires bearer JWT authentication on `/api/v1/mfa/**` through Spring Security's resource-server support. `spring.security.oauth2.resourceserver.jwt.issuer-uri` is required for the platform-owned trust configuration, and `jwk-set-uri` remains optional supplemental key material. The application validates the JWT issuer even when `jwk-set-uri` is configured explicitly. Rate limits, gateway routes, authenticator provisioning UX, and auth-service orchestration remain later integration work. Transaction Service remains responsible for acting on verified assurance; this service only publishes the versioned fact. The application/domain foundation remains usable without Spring MVC or an HTTP request context.

@@ -37,6 +37,14 @@ spec:
               value: {{ .Values.runtime.profile | quote }}
             - name: SERVER_PORT
               value: {{ .Values.service.port | quote }}
+            - name: MFA_ASSURANCE_PUBLISHER_ENABLED
+              value: {{ .Values.assurancePublisher.enabled | quote }}
+            - name: MFA_ASSURANCE_PUBLISHER_BATCH_SIZE
+              value: {{ .Values.assurancePublisher.batchSize | quote }}
+            - name: MFA_ASSURANCE_PUBLISHER_POLL_INTERVAL_MS
+              value: {{ .Values.assurancePublisher.pollIntervalMs | quote }}
+            - name: MFA_KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.kafka.bootstrapServers | quote }}
             - name: MFA_DATASOURCE_URL
               value: {{ .Values.database.url | quote }}
             - name: DB_USERNAME

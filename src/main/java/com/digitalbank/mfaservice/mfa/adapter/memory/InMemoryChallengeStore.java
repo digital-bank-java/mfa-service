@@ -22,4 +22,12 @@ public final class InMemoryChallengeStore implements ChallengeStore {
     public Optional<Challenge> find(ChallengeId challengeId) {
         return Optional.ofNullable(challenges.get(challengeId));
     }
+
+    @Override
+    public Optional<Challenge> findByDecisionId(String decisionId) {
+        return challenges.values().stream()
+                .filter(challenge -> challenge.transferBinding() != null)
+                .filter(challenge -> challenge.transferBinding().decisionId().equals(decisionId))
+                .findFirst();
+    }
 }

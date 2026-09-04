@@ -8,4 +8,8 @@ public interface MfaIdentifierGenerator {
     EnrollmentId newEnrollmentId();
 
     ChallengeId newChallengeId();
+
+    default String newEventId() {
+        return java.util.UUID.randomUUID().toString();
+    }
 }
