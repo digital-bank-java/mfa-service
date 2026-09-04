@@ -41,6 +41,8 @@ Config Server supplies the effective runtime configuration. The service reposito
 | `CONFIG_SERVER_URL` | Config Server base URL | `http://localhost:8888` |
 | `SPRING_PROFILES_ACTIVE` | Runtime environment profile | Spring `default` profile |
 | `SERVER_PORT` | Workstation/container HTTP port | `8087` |
+| `auth.jwt.secret` | Base64 HMAC secret shared with Auth Service in SIT | none |
+| `auth.jwt.issuer` | HMAC token issuer used in SIT | none |
 | `MFA_DATASOURCE_URL` | PostgreSQL JDBC URL; Config Server or Helm supplies the effective value | `jdbc:postgresql://postgres:5432/mfa_service` |
 | `DB_USERNAME` / `DB_PASSWORD` | PostgreSQL credentials referenced by Config Server and Helm | none |
 | `MFA_TOTP_ENCRYPTION_KEY` | Base64 encoding of a 32-byte AES key used to protect TOTP secrets at rest | required |
@@ -58,11 +60,11 @@ Internal endpoint authentication depends on standard Spring Security resource-se
 
 | Property | Purpose | Default |
 | --- | --- | --- |
-| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | JWT issuer for internal service authentication | none |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | OIDC issuer for internal service authentication | none |
 | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` | JWK set endpoint for internal service authentication | none |
 | `mfa.totp.encryption-key` | AES-GCM key material; bind from `MFA_TOTP_ENCRYPTION_KEY` and keep outside Git | required |
 
-`spring.security.oauth2.resourceserver.jwt.issuer-uri` is the required trust anchor for MFA endpoint authentication. When `jwk-set-uri` is configured, the decoder still validates the token issuer against `issuer-uri`; JWK material alone is not treated as sufficient trust configuration.
+When `spring.security.oauth2.resourceserver.jwt.issuer-uri` is configured, MFA uses OIDC discovery or the explicit JWK set and validates the token issuer. In local SIT, the service instead uses `auth.jwt.secret` and `auth.jwt.issuer` to validate the shared Auth Service HMAC token. HMAC mode requires a base64 secret decoding to at least 32 bytes; JWK material alone is not treated as sufficient trust configuration.
 
 The formal environments are `sit`, `uat`, and `prod`. `sit` runs on local Docker Desktop Kubernetes; `uat` and `prod` are future AWS environments. `local` is not an active environment or Spring profile. Workstation debugging uses the `sit` profile with temporary overrides against forwarded SIT dependencies.
 
@@ -178,7 +180,7 @@ The integration tests disable Config Client and validate health, liveness, readi
 Build the image:
 
 ```bash
-docker build -t digital-bank-java/mfa-service:0.0.1 .
+docker build -t digital-bank-java/mfa-service:0.0.2 .
 ```
 
 Run it against a reachable Config Server and JWT issuer/JWK configuration:
@@ -205,7 +207,7 @@ helm lint helm --strict --values helm/values-sit.yaml
 helm template mfa-service helm \
   --namespace digital-bank-sit \
   --values helm/values-sit.yaml \
-  --set image.tag="0.0.1" \
+  --set image.tag="0.0.2" \
   | kubectl apply --dry-run=client -f -
 
 helm upgrade --install mfa-service helm \

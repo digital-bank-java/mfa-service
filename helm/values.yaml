@@ -30,6 +30,11 @@ totp:
   encryptionKeySecretName: mfa-service-secrets
   encryptionKeySecretKey: MFA_TOTP_ENCRYPTION_KEY
 
+auth:
+  enabled: false
+  secretName: auth-service-secrets
+  secretKey: jwt-secret
+
 service:
   type: ClusterIP
   port: 8087
