@@ -260,3 +260,8 @@ All changes require review by the CODEOWNERS maintainer. Never commit credential
 ## Follow-Up Integration
 
 Auth-service orchestration, step-up policy, external provider adapters, recovery codes, API Gateway routes, and any future shared API client collections remain follow-up work linked to organization issues [#49](https://github.com/digital-bank-java/.github/issues/49), [#50](https://github.com/digital-bank-java/.github/issues/50), and [#51](https://github.com/digital-bank-java/.github/issues/51). The bootstrap PR [#1](https://github.com/digital-bank-java/mfa-service/pull/1) remains the required runtime/build dependency for this foundation.
+
+## Operational Logging
+
+The service emits one-line ECS JSON console events and propagates the bounded
+`X-Correlation-ID` boundary defined in the organization [structured logging and redaction contract](https://github.com/digital-bank-java/.github/blob/main/docs/structured-logging-and-redaction.md). OTP values, secrets, challenge data, and identity data are not logged.
