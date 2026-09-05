@@ -180,7 +180,7 @@ The integration tests disable Config Client and validate health, liveness, readi
 Build the image:
 
 ```bash
-docker build -t digital-bank-java/mfa-service:0.0.2 .
+docker build -t digital-bank-java/mfa-service:0.0.3 .
 ```
 
 Run it against a reachable Config Server and JWT issuer/JWK configuration:
@@ -192,7 +192,7 @@ docker run --rm \
   --env CONFIG_SERVER_URL=http://host.docker.internal:8888 \
   --env SPRING_PROFILES_ACTIVE=sit \
   --env SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://issuer.example.internal \
-  digital-bank-java/mfa-service:0.0.1
+  digital-bank-java/mfa-service:0.0.3
 ```
 
 The image runs as numeric non-root user and group `10001:10001` and uses `/tmp` for writable temporary files.
@@ -207,7 +207,7 @@ helm lint helm --strict --values helm/values-sit.yaml
 helm template mfa-service helm \
   --namespace digital-bank-sit \
   --values helm/values-sit.yaml \
-  --set image.tag="0.0.2" \
+  --set image.tag="0.0.3" \
   | kubectl apply --dry-run=client -f -
 
 helm upgrade --install mfa-service helm \
