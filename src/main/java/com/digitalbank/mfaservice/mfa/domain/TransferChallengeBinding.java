@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 
 /** Immutable transfer intent bound to a step-up challenge. */
 public record TransferChallengeBinding(
@@ -22,11 +23,11 @@ public record TransferChallengeBinding(
     public TransferChallengeBinding {
         transferId = required(transferId, "transferId");
         reservationRequestId = required(reservationRequestId, "reservationRequestId");
-        decisionId = required(decisionId, "decisionId");
+        decisionId = requiredUuid(decisionId, "decisionId");
         decisionRequestId = required(decisionRequestId, "decisionRequestId");
         customerId = required(customerId, "customerId");
-        sourceAccountId = required(sourceAccountId, "sourceAccountId");
-        destinationAccountId = required(destinationAccountId, "destinationAccountId");
+        sourceAccountId = requiredUuid(sourceAccountId, "sourceAccountId");
+        destinationAccountId = requiredUuid(destinationAccountId, "destinationAccountId");
         amount = Objects.requireNonNull(amount, "amount").setScale(4, RoundingMode.UNNECESSARY);
         if (amount.signum() <= 0) {
             throw new IllegalArgumentException("amount must be positive");
@@ -44,5 +45,18 @@ public record TransferChallengeBinding(
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value.trim();
+    }
+
+    private static String requiredUuid(String value, String name) {
+        var normalized = required(value, name);
+        try {
+            var parsed = UUID.fromString(normalized);
+            if (!parsed.toString().equalsIgnoreCase(normalized)) {
+                throw new IllegalArgumentException("non-canonical UUID");
+            }
+            return normalized;
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(name + " must be a UUID", exception);
+        }
     }
 }

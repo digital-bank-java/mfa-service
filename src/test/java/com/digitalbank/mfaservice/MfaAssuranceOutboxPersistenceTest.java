@@ -29,6 +29,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class MfaAssuranceOutboxPersistenceTest {
 
     private static final Instant NOW = Instant.parse("2026-09-04T10:15:30Z");
+    private static final String SOURCE_ACCOUNT_ID = "11111111-1111-1111-1111-111111111111";
+    private static final String DESTINATION_ACCOUNT_ID = "22222222-2222-2222-2222-222222222222";
+    private static final String EVENT_ID = "77777777-7777-7777-7777-777777777777";
 
     @Autowired
     private EnrollmentStore enrollmentStore;
@@ -49,10 +52,15 @@ class MfaAssuranceOutboxPersistenceTest {
     void persistsAssuranceOnlyWithTheConsumedChallenge() {
         var enrollmentId = new EnrollmentId("enrollment-outbox-commit");
         var challengeId = new ChallengeId("challenge-outbox-commit");
-        prepare(enrollmentId, challengeId, "transfer-outbox", "decision-outbox");
+        prepare(enrollmentId, challengeId, "transfer-outbox", "44444444-4444-4444-4444-444444444444");
 
         var result = service(enrollmentId, challengeId, assuranceOutbox)
-                .verifyTransferChallenge(challengeId, "subject-outbox", "transfer-outbox", "decision-outbox", "123456");
+                .verifyTransferChallenge(
+                        challengeId,
+                        "subject-outbox",
+                        "transfer-outbox",
+                        "44444444-4444-4444-4444-444444444444",
+                        "123456");
 
         assertThat(result.status().name()).isEqualTo("VERIFIED");
         assertThat(jdbcTemplate.queryForObject(
@@ -61,9 +69,9 @@ class MfaAssuranceOutboxPersistenceTest {
         var outboxRows = jdbcTemplate.queryForList(
                 "select event_id, payload from mfa_assurance_outbox where aggregate_id = ?", "transfer-outbox");
         assertThat(outboxRows).hasSize(1);
-        assertThat(outboxRows.getFirst().get("event_id")).isEqualTo("event-outbox");
+        assertThat(outboxRows.getFirst().get("event_id")).isEqualTo(EVENT_ID);
         assertThat(outboxRows.getFirst().get("payload").toString())
-                .contains("\"eventId\":\"event-outbox\"")
+                .contains("\"eventId\":\"" + EVENT_ID + "\"")
                 .contains("\"transferId\":\"transfer-outbox\"");
     }
 
@@ -71,7 +79,7 @@ class MfaAssuranceOutboxPersistenceTest {
     void rollsBackChallengeConsumptionWhenOutboxWriteFails() {
         var enrollmentId = new EnrollmentId("enrollment-outbox-rollback");
         var challengeId = new ChallengeId("challenge-outbox-rollback");
-        prepare(enrollmentId, challengeId, "transfer-outbox-rollback", "decision-outbox-rollback");
+        prepare(enrollmentId, challengeId, "transfer-outbox-rollback", "55555555-5555-5555-5555-555555555555");
         var failingOutbox = new MfaAssuranceOutboxStore() {
             @Override
             public void append(com.digitalbank.mfaservice.mfa.application.MfaAssuranceGrantedEvent event) {
@@ -96,7 +104,7 @@ class MfaAssuranceOutboxPersistenceTest {
                                 challengeId,
                                 "subject-outbox",
                                 "transfer-outbox-rollback",
-                                "decision-outbox-rollback",
+                                "55555555-5555-5555-5555-555555555555",
                                 "123456"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("outbox unavailable");
@@ -119,8 +127,8 @@ class MfaAssuranceOutboxPersistenceTest {
                 decisionId,
                 "decision-request-outbox",
                 "subject-outbox",
-                "account-source",
-                "account-destination",
+                SOURCE_ACCOUNT_ID,
+                DESTINATION_ACCOUNT_ID,
                 new BigDecimal("100.00"),
                 "USD",
                 "policy-1",
@@ -162,7 +170,7 @@ class MfaAssuranceOutboxPersistenceTest {
 
         @Override
         public String newEventId() {
-            return "event-outbox";
+            return EVENT_ID;
         }
     }
 

@@ -17,16 +17,18 @@ record CreateTransferChallengeRequest(
         @NotBlank @Schema(description = "Account reservation request identifier", example = "reservation-1")
         String reservationRequestId,
 
-        @NotBlank @Schema(description = "Single-use risk decision identifier", example = "decision-1")
+        @NotBlank
+        @Schema(description = "Single-use risk decision identifier", example = "44444444-4444-4444-4444-444444444444")
         String decisionId,
 
         @NotBlank @Schema(description = "Risk decision request identifier", example = "decision-request-1")
         String decisionRequestId,
 
-        @NotBlank @Schema(description = "Source account identifier", example = "account-1")
+        @NotBlank @Schema(description = "Source account identifier", example = "11111111-1111-1111-1111-111111111111")
         String sourceAccountId,
 
-        @NotBlank @Schema(description = "Destination account identifier", example = "account-2")
+        @NotBlank
+        @Schema(description = "Destination account identifier", example = "22222222-2222-2222-2222-222222222222")
         String destinationAccountId,
 
         @DecimalMin(value = "0.0001")

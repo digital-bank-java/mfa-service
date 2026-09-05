@@ -26,7 +26,9 @@ record TransferChallengeResponse(
         @Schema(description = "Transfer identifier bound to this challenge", example = "transfer-1")
         String transferId,
 
-        @Schema(description = "Risk decision identifier bound to this challenge", example = "decision-1")
+        @Schema(
+                description = "Risk decision identifier bound to this challenge",
+                example = "44444444-4444-4444-4444-444444444444")
         String decisionId,
 
         @Schema(description = "Risk policy version bound to this challenge", example = "policy-1")
