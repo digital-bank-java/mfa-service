@@ -7,7 +7,7 @@ record VerifyTransferChallengeRequest(
         @NotBlank @Schema(description = "Transfer workflow identifier", example = "transfer-1")
         String transferId,
 
-        @NotBlank @Schema(description = "Risk decision identifier", example = "decision-1")
+        @NotBlank @Schema(description = "Risk decision identifier", example = "44444444-4444-4444-4444-444444444444")
         String decisionId,
 
         @NotBlank @Schema(description = "Six-digit TOTP code", example = "123456")

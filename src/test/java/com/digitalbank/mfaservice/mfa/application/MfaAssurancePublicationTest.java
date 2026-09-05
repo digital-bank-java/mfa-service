@@ -24,6 +24,8 @@ class MfaAssurancePublicationTest {
     private static final Instant NOW = Instant.parse("2026-09-04T10:15:30Z");
     private static final EnrollmentId ENROLLMENT_ID = new EnrollmentId("enrollment-assurance");
     private static final ChallengeId CHALLENGE_ID = new ChallengeId("challenge-assurance");
+    private static final String DECISION_ID = "44444444-4444-4444-4444-444444444444";
+    private static final String EVENT_ID = "77777777-7777-7777-7777-777777777777";
 
     private final InMemoryEnrollmentStore enrollmentStore = new InMemoryEnrollmentStore();
     private final InMemoryChallengeStore challengeStore = new InMemoryChallengeStore();
@@ -56,15 +58,15 @@ class MfaAssurancePublicationTest {
     void successfulTransferVerificationCreatesOneStableAssuranceEventAcrossReplay() {
         service.createTransferChallenge(ENROLLMENT_ID, "subject-1", binding());
 
-        assertThat(service.verifyTransferChallenge(CHALLENGE_ID, "subject-1", "transfer-1", "decision-1", "123456")
+        assertThat(service.verifyTransferChallenge(CHALLENGE_ID, "subject-1", "transfer-1", DECISION_ID, "123456")
                         .status())
                 .isEqualTo(ChallengeOutcome.VERIFIED);
-        assertThat(service.verifyTransferChallenge(CHALLENGE_ID, "subject-1", "transfer-1", "decision-1", "123456")
+        assertThat(service.verifyTransferChallenge(CHALLENGE_ID, "subject-1", "transfer-1", DECISION_ID, "123456")
                         .status())
                 .isEqualTo(ChallengeOutcome.REPLAYED);
 
         assertThat(outbox.entries()).hasSize(1);
-        assertThat(outbox.entries().getFirst().eventId()).isEqualTo("event-1");
+        assertThat(outbox.entries().getFirst().eventId()).isEqualTo(EVENT_ID);
         assertThat(outbox.entries().getFirst().payload())
                 .contains("\"schemaVersion\":\"1.0.0\"")
                 .contains("\"transactionId\":\"transfer-1\"")
@@ -82,7 +84,7 @@ class MfaAssurancePublicationTest {
         provider.accepted = false;
         service.createTransferChallenge(ENROLLMENT_ID, "subject-1", binding());
 
-        assertThat(service.verifyTransferChallenge(CHALLENGE_ID, "subject-1", "transfer-1", "decision-1", "000000")
+        assertThat(service.verifyTransferChallenge(CHALLENGE_ID, "subject-1", "transfer-1", DECISION_ID, "000000")
                         .status())
                 .isEqualTo(ChallengeOutcome.INVALID_CODE);
 
@@ -93,11 +95,11 @@ class MfaAssurancePublicationTest {
         return new TransferChallengeBinding(
                 "transfer-1",
                 "reservation-1",
-                "decision-1",
+                DECISION_ID,
                 "decision-request-1",
                 "subject-1",
-                "account-source",
-                "account-destination",
+                "11111111-1111-1111-1111-111111111111",
+                "22222222-2222-2222-2222-222222222222",
                 new BigDecimal("1250.75"),
                 "usd",
                 "transfer-risk-policy-2026-09",
@@ -118,7 +120,7 @@ class MfaAssurancePublicationTest {
 
         @Override
         public String newEventId() {
-            return "event-1";
+            return EVENT_ID;
         }
     }
 
