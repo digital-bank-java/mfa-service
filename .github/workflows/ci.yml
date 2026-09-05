@@ -161,8 +161,20 @@ jobs:
             exit 1
           fi
 
-          docker exec postgres-mfa-service-ci \
-            psql --username=mfa_ci --dbname=postgres --command='create database mfa_service;'
+          database_created=false
+          for attempt in {1..10}; do
+            if docker exec postgres-mfa-service-ci \
+              psql --username=mfa_ci --dbname=postgres --command='create database mfa_service;' > /dev/null 2>&1; then
+              database_created=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "${database_created}" != "true" ]]; then
+            docker logs postgres-mfa-service-ci
+            exit 1
+          fi
 
           docker run --detach \
             --name mfa-service-ci \
