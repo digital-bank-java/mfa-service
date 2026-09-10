@@ -42,8 +42,10 @@ class MfaApiIT {
         var enrollment = objectMapper.readTree(enrollmentResponse.body());
         assertThat(enrollment.path("status").asText()).isEqualTo("ENROLLED");
         assertThat(enrollment.path("enrollmentStatus").asText()).isEqualTo("PENDING");
-        assertThat(enrollment.has("provisioningUri")).isFalse();
-        assertThat(enrollmentResponse.body()).doesNotContain("TEST-SECRET");
+        assertThat(enrollment.path("provisioningUri").asText()).startsWith("otpauth://totp/");
+        assertThat(enrollment.path("provisioningUri").asText()).contains("secret=TEST-SECRET");
+        assertThat(enrollmentResponse.headers().firstValue("cache-control")).hasValue("no-store");
+        assertThat(enrollmentResponse.headers().firstValue("pragma")).hasValue("no-cache");
         var enrollmentId = enrollment.path("enrollmentId").asText();
 
         var activationResponse =
@@ -413,7 +415,7 @@ class MfaApiIT {
                         .path("EnrollmentResponse")
                         .path("properties")
                         .has("provisioningUri"))
-                .isFalse();
+                .isTrue();
         var createEnrollmentSchema = openApi.path("components").path("schemas").path("CreateEnrollmentRequest");
         assertThat(createEnrollmentSchema
                         .path("properties")

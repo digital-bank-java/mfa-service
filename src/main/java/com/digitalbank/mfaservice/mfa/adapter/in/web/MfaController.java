@@ -340,6 +340,8 @@ class MfaController {
         var result = enrollmentService.enroll(authenticatedSubject(authentication));
         var response = EnrollmentResponse.from(result);
         return ResponseEntity.status(HttpStatus.CREATED)
+                .header("Cache-Control", "no-store")
+                .header("Pragma", "no-cache")
                 .location(URI.create("/api/v1/mfa/enrollments/" + response.enrollmentId()))
                 .body(response);
     }
