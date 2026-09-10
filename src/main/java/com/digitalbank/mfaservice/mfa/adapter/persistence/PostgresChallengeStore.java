@@ -8,6 +8,7 @@ import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
 import com.digitalbank.mfaservice.mfa.domain.TransferChallengeBinding;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -40,8 +41,8 @@ public final class PostgresChallengeStore implements ChallengeStore {
                 where id = ?
                 """,
                 challenge.enrollmentId().value(),
-                challenge.createdAt(),
-                challenge.expiresAt(),
+                Timestamp.from(challenge.createdAt()),
+                Timestamp.from(challenge.expiresAt()),
                 challenge.maxAttempts(),
                 challenge.failedAttempts(),
                 challenge.status().name(),
@@ -69,8 +70,8 @@ public final class PostgresChallengeStore implements ChallengeStore {
                     """,
                     challenge.id().value(),
                     challenge.enrollmentId().value(),
-                    challenge.createdAt(),
-                    challenge.expiresAt(),
+                    Timestamp.from(challenge.createdAt()),
+                    Timestamp.from(challenge.expiresAt()),
                     challenge.maxAttempts(),
                     challenge.failedAttempts(),
                     challenge.status().name(),

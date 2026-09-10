@@ -6,6 +6,7 @@ import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -36,7 +37,7 @@ public final class PostgresEnrollmentStore implements EnrollmentStore {
                 where id = ?
                 """,
                 enrollment.subjectId(),
-                enrollment.createdAt(),
+                Timestamp.from(enrollment.createdAt()),
                 ciphertext,
                 enrollment.status().name(),
                 enrollment.id().value());
@@ -48,7 +49,7 @@ public final class PostgresEnrollmentStore implements EnrollmentStore {
                     """,
                     enrollment.id().value(),
                     enrollment.subjectId(),
-                    enrollment.createdAt(),
+                    Timestamp.from(enrollment.createdAt()),
                     ciphertext,
                     enrollment.status().name());
         }
