@@ -596,8 +596,8 @@ class MfaController {
                 request.currency(),
                 request.policyVersion(),
                 request.correlationId());
-        var result =
-                challengeService.createTransferChallenge(new EnrollmentId(request.enrollmentId()), subjectId, binding);
+        var result = challengeService.createTransferChallenge(
+                new EnrollmentId(request.enrollmentId()), subjectId, binding, request.riskExpiresAt());
         var response = mapTransferChallengeCreationResult(result);
         var builder = ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .header("Idempotent-Replay", Boolean.toString(result.replayed()));
