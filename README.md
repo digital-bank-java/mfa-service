@@ -22,7 +22,7 @@ Multi-Factor Authentication Service is the Digital Bank Java platform boundary f
 
 This service owns MFA provider state persistence and policy boundaries. It does not own customer identity data, login orchestration, recovery codes, or API Gateway routing. It publishes only the versioned transfer-assurance fact described below; it does not make transfer authorization decisions.
 
-TOTP enrollment and challenge responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. The generated secret is held only inside the credential store and is never returned in HTTP responses, application results, or aggregate `toString` output. Active challenge results contain only an opaque challenge id, lifecycle status, expiry, and remaining attempts.
+TOTP enrollment creation returns an authenticated, one-time `otpauth://` provisioning URI so an approved authenticator can be configured. The URI is sent with `Cache-Control: no-store` and `Pragma: no-cache`; it is never retrievable later, logged, or included in application-result and aggregate `toString` output. Enrollment verification and challenge responses contain only opaque ids, lifecycle status, expiry metadata, and remaining attempts.
 
 Challenge verification is fail-closed at `now >= expiresAt`. Wrong codes consume one attempt, the final failed attempt moves the challenge to `EXHAUSTED`, a valid code moves it to `CONSUMED`, and later verification of a consumed challenge returns a replay outcome without calling the TOTP provider again. The default challenge TTL is `PT5M`, the maximum challenge TTL is `PT15M`, and the default maximum is `5` attempts; both settings are configurable through `mfa.challenge.ttl` and `mfa.challenge.max-attempts` and remain subject to their security bounds.
 
@@ -81,7 +81,7 @@ The service exposes these routes directly on `mfa-service`:
 | `POST` | `/api/v1/mfa/transfer-challenges` | Create a challenge bound to an immutable transfer risk decision and transfer intent. |
 | `POST` | `/api/v1/mfa/transfer-challenges/{challengeId}/verifications` | Verify a transfer-bound challenge against its transfer and decision identifiers. |
 
-All `/api/v1/mfa/**` routes require an internal bearer JWT. Success responses return only opaque ids, lifecycle status, expiry metadata, and remaining attempts. Raw TOTP secrets, provisioning URIs, and submitted codes are never returned.
+All `/api/v1/mfa/**` routes require an internal bearer JWT. The enrollment creation response contains the one-time provisioning URI and no raw secret field; later enrollment and challenge responses contain only opaque ids, lifecycle status, expiry metadata, and remaining attempts. Clients must treat the URI as sensitive setup material and must not persist it in shared logs or exported workspace data.
 
 Enrollment ownership is derived exclusively from the authenticated JWT `sub` claim. The legacy `subjectId` request field remains accepted for client compatibility but is ignored and is not an authorization input. Enrollment and challenge identifiers are also checked against that authenticated subject; missing and foreign resources use the same controlled `404` resource-not-found problem.
 
@@ -121,7 +121,7 @@ Error responses use `application/problem+json`. Authentication failures return `
 
 Successful transfer-bound verification writes one `MfaAssuranceGranted.v1` event to the PostgreSQL outbox in the same transaction that consumes the challenge. The event is published to `mfa.assurance.granted.v1` with the persisted event id and payload; retries are at-least-once and consumers must deduplicate by `eventId`. Invalid, expired, replayed, or binding-mismatched verification never writes assurance.
 
-This repository does not invent or transport TOTP provisioning secrets over HTTP. MFA enrollment remains usable only once the platform-owned authenticator provisioning path is integrated. Until then, the HTTP adapter exposes the approved internal enrollment and challenge contract without secret-bearing response fields.
+The enrollment creation response is the platform-owned authenticator provisioning path. It is authenticated to the enrollment owner and returns the URI only at creation time. There is no secret-retrieval endpoint, and the response object and application result redact the URI from `toString()` output. Clients must discard the URI after authenticator provisioning.
 
 Before deploying to SIT, the Config Server's backing `config-repo` should contain the `mfa-service` defaults and SIT override from config-repo PR [#32](https://github.com/digital-bank-java/config-repo/pull/32). Without those service-specific files, Config Server can still return shared configuration and the service can start with its local port default, but the intended `mfa-service` metadata is absent. The mandatory Config Client import still fails startup when Config Server itself is unavailable.
 

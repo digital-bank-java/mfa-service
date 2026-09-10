@@ -7,6 +7,8 @@ import com.digitalbank.mfaservice.mfa.application.port.TotpProvider;
 import com.digitalbank.mfaservice.mfa.domain.Enrollment;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentId;
 import com.digitalbank.mfaservice.mfa.domain.EnrollmentVerificationOutcome;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.Objects;
 
@@ -41,16 +43,18 @@ public final class TotpEnrollmentService {
 
     public EnrollmentResult enroll(String subjectId) {
         var enrollmentId = identifierGenerator.newEnrollmentId();
-        var enrollment = Enrollment.pending(enrollmentId, subjectId, totpProvider.generateSecret(), clock.instant());
+        var secret = totpProvider.generateSecret();
+        var enrollment = Enrollment.pending(enrollmentId, subjectId, secret, clock.instant());
         enrollmentStore.save(enrollment);
-        return new EnrollmentResult(EnrollmentOutcome.ENROLLED, enrollmentId, enrollment.status());
+        return new EnrollmentResult(
+                EnrollmentOutcome.ENROLLED, enrollmentId, enrollment.status(), provisioningUri(secret));
     }
 
     public EnrollmentResult verify(EnrollmentId enrollmentId, String subjectId, String code) {
         return transactionRunner.execute(() -> {
             var enrollment = enrollmentStore.find(enrollmentId);
             if (enrollment.isEmpty() || !enrollment.orElseThrow().subjectId().equals(subjectId)) {
-                return new EnrollmentResult(EnrollmentOutcome.NOT_FOUND, enrollmentId, null);
+                return new EnrollmentResult(EnrollmentOutcome.NOT_FOUND, enrollmentId, null, null);
             }
             var record = enrollment.orElseThrow();
             var verificationOutcome = record.verifyAndActivate(totpProvider, code, clock.instant());
@@ -63,7 +67,13 @@ public final class TotpEnrollmentService {
                         case INVALID_CODE -> EnrollmentOutcome.INVALID_CODE;
                         case ALREADY_ACTIVE -> EnrollmentOutcome.ALREADY_ACTIVE;
                     };
-            return new EnrollmentResult(applicationOutcome, record.id(), record.status());
+            return new EnrollmentResult(applicationOutcome, record.id(), record.status(), null);
         });
+    }
+
+    private static String provisioningUri(String secret) {
+        var issuer = URLEncoder.encode("Digital Bank", StandardCharsets.UTF_8);
+        return "otpauth://totp/" + issuer + "?secret=" + secret + "&issuer=" + issuer
+                + "&algorithm=SHA1&digits=6&period=30";
     }
 }

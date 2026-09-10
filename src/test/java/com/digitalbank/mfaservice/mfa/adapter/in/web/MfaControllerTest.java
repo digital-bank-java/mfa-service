@@ -74,7 +74,9 @@ class MfaControllerTest {
                 .andExpect(jsonPath("$.status").value("ENROLLED"))
                 .andExpect(jsonPath("$.enrollmentId").value("enrollment-1"))
                 .andExpect(jsonPath("$.enrollmentStatus").value("PENDING"))
-                .andExpect(jsonPath("$.provisioningUri").doesNotExist());
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Pragma", "no-cache"))
+                .andExpect(jsonPath("$.provisioningUri").value(org.hamcrest.Matchers.startsWith("otpauth://totp/")));
     }
 
     @Test

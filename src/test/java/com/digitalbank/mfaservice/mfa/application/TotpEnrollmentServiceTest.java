@@ -29,12 +29,15 @@ class TotpEnrollmentServiceTest {
     }
 
     @Test
-    void enrollmentCreatesPendingRecordWithoutDisclosingSecretInResultsOrToString() {
+    void enrollmentCreatesPendingRecordWithRedactedResultLogging() {
         EnrollmentResult result = service.enroll("subject-1");
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.ENROLLED);
         assertThat(result.enrollmentId()).isEqualTo(ENROLLMENT_ID);
         assertThat(result.enrollmentStatus()).isEqualTo(EnrollmentStatus.PENDING);
+        assertThat(result.provisioningUri())
+                .isEqualTo("otpauth://totp/Digital+Bank?secret=" + SECRET
+                        + "&issuer=Digital+Bank&algorithm=SHA1&digits=6&period=30");
         assertThat(result.toString()).doesNotContain(SECRET);
         assertThat(store.find(ENROLLMENT_ID).orElseThrow().toString()).doesNotContain(SECRET);
     }
@@ -48,6 +51,7 @@ class TotpEnrollmentServiceTest {
 
         assertThat(result.status()).isEqualTo(EnrollmentOutcome.ACTIVATED);
         assertThat(result.enrollmentStatus()).isEqualTo(EnrollmentStatus.ACTIVE);
+        assertThat(result.provisioningUri()).isNull();
         assertThat(store.find(ENROLLMENT_ID).orElseThrow().status()).isEqualTo(EnrollmentStatus.ACTIVE);
         assertThat(provider.lastVerifiedSecret()).isEqualTo(SECRET);
         assertThat(provider.lastVerifiedInstant()).isEqualTo(NOW);
