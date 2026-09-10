@@ -4,8 +4,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
+import java.time.Instant;
 
 record CreateTransferChallengeRequest(
         @NotBlank @Schema(description = "Opaque MFA enrollment identifier", example = "enrollment-1")
@@ -41,6 +43,12 @@ record CreateTransferChallengeRequest(
 
         @NotBlank @Schema(description = "Risk policy version", example = "transfer-risk-policy-2026-09")
         String policyVersion,
+
+        @NotNull
+        @Schema(
+                description = "Expiry instant of the originating transfer risk decision",
+                example = "2026-08-30T10:25:00Z")
+        Instant riskExpiresAt,
 
         @NotBlank @Schema(description = "Transfer correlation identifier", example = "transfer-1")
         String correlationId) {}

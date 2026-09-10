@@ -15,6 +15,7 @@ import com.digitalbank.mfaservice.mfa.domain.EnrollmentStatus;
 import com.digitalbank.mfaservice.mfa.domain.TransferChallengeBinding;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 public final class MfaChallengeService {
@@ -155,6 +156,11 @@ public final class MfaChallengeService {
 
     public ChallengeResult createTransferChallenge(
             EnrollmentId enrollmentId, String subjectId, TransferChallengeBinding binding) {
+        return createTransferChallenge(enrollmentId, subjectId, binding, null);
+    }
+
+    public ChallengeResult createTransferChallenge(
+            EnrollmentId enrollmentId, String subjectId, TransferChallengeBinding binding, Instant riskExpiresAt) {
         if (!subjectId.equals(binding.customerId())) {
             return new ChallengeResult(ChallengeOutcome.BINDING_MISMATCH, null, null, null, 0);
         }
@@ -176,13 +182,9 @@ public final class MfaChallengeService {
                 return result(challenge, true);
             }
             var createdAt = clock.instant();
+            var expiresAt = riskExpiresAt == null ? createdAt.plus(challengeTtl) : riskExpiresAt;
             var challenge = Challenge.open(
-                    identifierGenerator.newChallengeId(),
-                    enrollmentId,
-                    createdAt,
-                    createdAt.plus(challengeTtl),
-                    maxAttempts,
-                    binding);
+                    identifierGenerator.newChallengeId(), enrollmentId, createdAt, expiresAt, maxAttempts, binding);
             challengeStore.save(challenge);
             return result(challenge, false);
         });
